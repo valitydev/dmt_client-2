@@ -1,0 +1,14 @@
+{application, dmt_client, [
+    {description, "Domain config client"},
+    {vsn, "0"},
+    {registered, []},
+    {applications, [
+        kernel,
+        stdlib,
+        lager,
+        woody,
+        dmt
+    ]},
+    {mod, {dmt_client, []}},
+    {env, []}
+]}.
