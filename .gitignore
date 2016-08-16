@@ -1,0 +1,8 @@
+# general
+log
+/_build/
+*~
+erl_crash.dump
+.tags*
+*.sublime-workspace
+.DS_Store
