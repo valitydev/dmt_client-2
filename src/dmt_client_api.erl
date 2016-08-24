@@ -25,7 +25,7 @@ checkout_object(Reference, ObjectReference) ->
 
 call(ServiceName, Function, Args) ->
     Host = application:get_env(dmt, client_host, "dominant"),
-    Port = integer_to_list(application:get_env(dmt, client_port, 8800)),
+    Port = integer_to_list(application:get_env(dmt, client_port, 8022)),
     {Path, {Service, _Handler, _Opts}} = get_handler_spec(ServiceName),
     Call = {Service, Function, Args},
     Server = #{url => Host ++ ":" ++ Port ++ Path},
