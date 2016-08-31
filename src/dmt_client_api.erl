@@ -26,7 +26,7 @@ checkout_object(Reference, ObjectReference) ->
 call(ServiceName, Function, Args) ->
     Host = application:get_env(dmt, client_host, "dominant"),
     Port = integer_to_list(application:get_env(dmt, client_port, 8022)),
-    {Path, {Service, _Handler, _Opts}} = get_handler_spec(ServiceName),
+    {Path, Service} = get_handler_spec(ServiceName),
     Call = {Service, Function, Args},
     Server = #{url => Host ++ ":" ++ Port ++ Path},
     Context = woody_client:new_context(woody_client:make_id(<<"dmt_client">>), dmt_client_woody_event_handler),
@@ -40,14 +40,8 @@ call(ServiceName, Function, Args) ->
     end.
 
 get_handler_spec(repository) ->
-    {"/v1/domain/repository", {
-        {dmt_domain_config_thrift, 'Repository'},
-        dmt_api_repository_handler,
-        []
-    }};
+    {"/v1/domain/repository",
+        {dmt_client_domain_config_thrift, 'Repository'}};
 get_handler_spec(repository_client) ->
-    {"/v1/domain/repository_client", {
-        {dmt_domain_config_thrift, 'RepositoryClient'},
-        dmt_api_repository_client_handler,
-        []
-    }}.
+    {"/v1/domain/repository_client",
+        {dmt_client_domain_config_thrift, 'RepositoryClient'}}.
