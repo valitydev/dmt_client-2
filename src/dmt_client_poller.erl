@@ -70,5 +70,5 @@ pull(LastVersion) ->
     FreshHistory = dmt_client_api:pull(LastVersion),
     OldHead = dmt_cache:checkout_head(),
     #'Snapshot'{version = NewLastVersion} = NewHead = dmt_history:head(FreshHistory, OldHead),
-    ok = dmt_cache:cache_snapshot(NewHead),
+    _ = dmt_cache:cache_snapshot(NewHead),
     NewLastVersion.

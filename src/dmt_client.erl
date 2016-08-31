@@ -23,19 +23,23 @@
 
 -spec checkout(dmt:ref()) -> dmt:snapshot().
 checkout(Reference) ->
-    try 
+    try
         dmt_cache:checkout(Reference)
     catch
-        {version_not_found, Version} ->
-            dmt_cache:cache(Version, dmt_client_api:pull(0))
+        version_not_found ->
+            dmt_cache:cache_snapshot(dmt_client_api:checkout(Reference))
     end.
 
 -spec checkout_object(dmt:ref(), dmt:object_ref()) ->
-    dmt_domain_config_thrift:'VersionedObject'().
+    dmt_domain_config_thrift:'VersionedObject'() | no_return().
 checkout_object(Reference, ObjectReference) ->
     #'Snapshot'{version = Version, domain = Domain} = checkout(Reference),
-    Object = dmt_domain:get_object(ObjectReference, Domain),
-    #'VersionedObject'{version = Version, object = Object}.
+    case dmt_domain:get_object(ObjectReference, Domain) of
+        {ok, Object} ->
+            #'VersionedObject'{version = Version, object = Object};
+        error ->
+            throw(object_not_found)
+    end.
 
 -spec commit(dmt:version(), dmt:commit()) -> dmt:version().
 commit(Version, Commit) ->

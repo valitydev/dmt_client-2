@@ -31,14 +31,12 @@ call(ServiceName, Function, Args) ->
     Server = #{url => Host ++ ":" ++ Port ++ Path},
     Context = woody_client:new_context(woody_client:make_id(<<"dmt_client">>), dmt_client_woody_event_handler),
     case woody_client:call_safe(Context, Call, Server) of
-        {ok, _Context} ->
-            ok;
-        {{ok, Response}, _Context} ->
-            Response;
         {{exception, Exception}, _Context} ->
             throw(Exception);
         {{error, Error}, _Context} ->
-            error(Error)
+            error(Error);
+        {Response, _Context} ->
+            Response
     end.
 
 get_handler_spec(repository) ->
