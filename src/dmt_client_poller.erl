@@ -12,7 +12,6 @@
 -export([code_change/3]).
 
 -define(SERVER, ?MODULE).
--define(INTERVAL, 5000).
 
 -include_lib("dmt/include/dmt_domain_config_thrift.hrl").
 
@@ -34,27 +33,21 @@ poll() ->
 -spec init(_) -> {ok, state()}.
 
 init(_) ->
-    Timer = erlang:send_after(?INTERVAL, self(), poll),
-    {ok, #state{timer = Timer}}.
+    {ok, start_timer(#state{})}.
 
--spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call(poll, _From, #state{last_version = LastVersion, timer = Timer} = State) ->
-    _ = erlang:cancel_timer(Timer),
+-spec handle_call(poll, {pid(), term()}, state()) -> {reply, term(), state()}.
+handle_call(poll, _From, #state{last_version = LastVersion} = State) ->
     NewLastVersion = pull(LastVersion),
-    NewTimer = erlang:send_after(?INTERVAL, self(), poll),
-    {reply, ok, State#state{timer = NewTimer, last_version = NewLastVersion}}.
+    {reply, ok, restart_timer(State#state{last_version = NewLastVersion})}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
--spec handle_info(term(), state()) -> {noreply, state()}.
-handle_info(timer, #state{last_version = LastVersion} = State) ->
+-spec handle_info(poll, state()) -> {noreply, state()}.
+handle_info(poll, #state{last_version = LastVersion} = State) ->
     NewLastVersion = pull(LastVersion),
-    Timer = erlang:send_after(?INTERVAL, self(), poll),
-    {noreply, State#state{last_version = NewLastVersion, timer = Timer}};
-handle_info(_Msg, State) ->
-    {noreply, State}.
+    {noreply, restart_timer(State#state{last_version = NewLastVersion})}.
 
 -spec terminate(term(), state()) -> ok.
 terminate(_Reason, _State) ->
@@ -65,6 +58,20 @@ code_change(_OldVsn, _State, _Extra) ->
     {error, noimpl}.
 
 %% Internal
+
+-define(INTERVAL, 5000).
+
+-spec restart_timer(#state{}) -> #state{}.
+restart_timer(State = #state{timer = undefined}) ->
+    start_timer(State);
+restart_timer(State = #state{timer = TimerRef}) ->
+    _ = erlang:cancel_timer(TimerRef),
+    start_timer(State#state{timer = undefined}).
+
+-spec start_timer(#state{}) -> #state{}.
+start_timer(State = #state{timer = undefined}) ->
+    State#state{timer = erlang:send_after(?INTERVAL, self(), poll)}.
+
 -spec pull(dmt:version()) -> dmt:version().
 pull(LastVersion) ->
     FreshHistory = dmt_client_api:pull(LastVersion),
