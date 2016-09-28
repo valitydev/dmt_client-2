@@ -35,6 +35,8 @@ call(ServiceName, Function, Args) ->
             throw(Exception);
         {{error, Error}, _Context} ->
             error(Error);
+        {{ok, Response}, _Context} -> %% woody compatibility hack
+            Response;
         {Response, _Context} ->
             Response
     end.
