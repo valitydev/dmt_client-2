@@ -5,7 +5,9 @@ build('dmt_client', 'docker-host') {
   checkoutRepo()
 
   runStage('compile') {
-    withGithubSshCredentials("submodule update --init")
+    withGithubSshCredentials {
+      sh 'submodule update --init'
+    }
   }
 
   def pipeDefault
