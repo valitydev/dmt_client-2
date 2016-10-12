@@ -41,7 +41,7 @@ call(ServiceName, Function, Args) ->
 
 get_handler_spec(repository) ->
     {"/v1/domain/repository",
-        {dmt_client_domain_config_thrift, 'Repository'}};
+        {dmsl_domain_config_thrift, 'Repository'}};
 get_handler_spec(repository_client) ->
     {"/v1/domain/repository_client",
-        {dmt_client_domain_config_thrift, 'RepositoryClient'}}.
+        {dmsl_domain_config_thrift, 'RepositoryClient'}}.
