@@ -35,6 +35,8 @@ call(ServiceName, Function, Args) ->
             throw(Exception);
         {{error, Error}, _Context} ->
             error(Error);
+        {{ok, Response}, _Context} ->
+            Response;
         {Response, _Context} ->
             Response
     end.
