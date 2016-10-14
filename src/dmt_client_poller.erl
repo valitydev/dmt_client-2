@@ -25,7 +25,7 @@ poll() ->
 
 -record(state, {
     timer :: reference(),
-    last_version = 0 :: dmt:version()
+    last_version = undefined :: dmt:version()
 }).
 
 -type state() :: #state{}.
@@ -75,7 +75,12 @@ start_timer(State = #state{timer = undefined}) ->
 -spec pull(dmt:version()) -> dmt:version().
 pull(LastVersion) ->
     FreshHistory = dmt_client_api:pull(LastVersion),
-    OldHead = dmt_cache:checkout_head(),
+    OldHead = try 
+        dmt_cache:checkout_head()
+    catch
+        version_not_found ->
+            #'Snapshot'{version = 0, domain = dmt_domain:new()}
+    end,
     #'Snapshot'{version = NewLastVersion} = NewHead = dmt_history:head(FreshHistory, OldHead),
     _ = dmt_cache:cache_snapshot(NewHead),
     NewLastVersion.
