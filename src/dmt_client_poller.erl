@@ -13,7 +13,7 @@
 
 -define(SERVER, ?MODULE).
 
--include_lib("dmt/include/dmt_domain_config_thrift.hrl").
+-include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
 
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->

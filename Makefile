@@ -1,5 +1,5 @@
 REBAR := $(shell which rebar3 2>/dev/null || which ./rebar3)
-SUBMODULES = damsel builtils
+SUBMODULES = builtils
 SUBTARGETS = $(patsubst %,%/.git,$(SUBMODULES))
 
 UTILS_PATH := builtils

@@ -17,7 +17,7 @@
 -export([start/2]).
 -export([stop/1]).
 
--include_lib("dmt/include/dmt_domain_config_thrift.hrl").
+-include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
 
 %% API
 
@@ -31,7 +31,7 @@ checkout(Reference) ->
     end.
 
 -spec checkout_object(dmt:ref(), dmt:object_ref()) ->
-    dmt_domain_config_thrift:'VersionedObject'() | no_return().
+    dmsl_domain_config_thrift:'VersionedObject'() | no_return().
 checkout_object(Reference, ObjectReference) ->
     #'Snapshot'{version = Version, domain = Domain} = checkout(Reference),
     case dmt_domain:get_object(ObjectReference, Domain) of
