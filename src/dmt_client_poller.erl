@@ -19,13 +19,12 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec poll() -> ok.
+-spec poll() -> {ok, dmt:version()} | {error, term()}.
 poll() ->
     gen_server:call(?SERVER, poll).
 
 -record(state, {
-    timer :: reference(),
-    last_version = undefined :: dmt:version()
+    timer :: reference()
 }).
 
 -type state() :: #state{}.
@@ -36,18 +35,17 @@ init(_) ->
     {ok, start_timer(#state{})}.
 
 -spec handle_call(poll, {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call(poll, _From, #state{last_version = LastVersion} = State) ->
-    NewLastVersion = pull(LastVersion),
-    {reply, ok, restart_timer(State#state{last_version = NewLastVersion})}.
+handle_call(poll, _From, State) ->
+    {reply, pull_safe(), restart_timer(State)}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 -spec handle_info(poll, state()) -> {noreply, state()}.
-handle_info(poll, #state{last_version = LastVersion} = State) ->
-    NewLastVersion = pull(LastVersion),
-    {noreply, restart_timer(State#state{last_version = NewLastVersion})}.
+handle_info(poll, State) ->
+    _Result = pull_safe(),
+    {noreply, restart_timer(State)}.
 
 -spec terminate(term(), state()) -> ok.
 terminate(_Reason, _State) ->
@@ -59,7 +57,7 @@ code_change(_OldVsn, _State, _Extra) ->
 
 %% Internal
 
--define(INTERVAL, 5000).
+-define(DEFAULT_INTERVAL, 5000).
 
 -spec restart_timer(#state{}) -> #state{}.
 restart_timer(State = #state{timer = undefined}) ->
@@ -70,17 +68,41 @@ restart_timer(State = #state{timer = TimerRef}) ->
 
 -spec start_timer(#state{}) -> #state{}.
 start_timer(State = #state{timer = undefined}) ->
-    State#state{timer = erlang:send_after(?INTERVAL, self(), poll)}.
+    Interval = genlib_app:env(dmt_client, poll_interval, ?DEFAULT_INTERVAL),
+    State#state{timer = erlang:send_after(Interval, self(), poll)}.
 
--spec pull(dmt:version()) -> dmt:version().
-pull(LastVersion) ->
-    FreshHistory = dmt_client_api:pull(LastVersion),
+-spec pull() -> dmt:version().
+pull() ->
     OldHead = try 
         dmt_cache:checkout_head()
     catch
         version_not_found ->
             #'Snapshot'{version = 0, domain = dmt_domain:new()}
     end,
+    FreshHistory = dmt_client_api:pull(OldHead#'Snapshot'.version),
     #'Snapshot'{version = NewLastVersion} = NewHead = dmt_history:head(FreshHistory, OldHead),
     _ = dmt_cache:cache_snapshot(NewHead),
     NewLastVersion.
+
+-spec pull_safe() -> {ok, dmt:version()} | {error, term()}.
+
+pull_safe() ->
+    try
+        NewLastVersion = pull(),
+        {ok, NewLastVersion}
+    catch
+        error:{transport_error, Reason} when
+            % denial of service
+            Reason == server_error;
+            Reason == service_unavailable;
+            Reason == econnrefused;
+            % undefined result
+            Reason == timeout;
+            Reason == closed; % only if received after successful tcp send, otherwise denial of service
+            Reason == partial_response
+        ->
+            {error, Reason};
+        % undefined result
+        error:{transport_error, {http_code, 504}} ->
+            {error, gateway_timeout}
+    end.

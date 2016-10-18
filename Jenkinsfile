@@ -1,10 +1,14 @@
 #!groovy
 
-build('dmt_client', 'docker-host') {
+def finalHook = {
+  runStage('store CT logs') {
+    archive '_build/test/logs/'
+  }
+}
 
+build('dmt_client', 'docker-host', finalHook) {
   checkoutRepo()
-
-  runStage('compile') {
+  runStage('load_builtils') {
     withGithubSshCredentials {
       sh 'git submodule update --init'
     }
@@ -27,6 +31,12 @@ build('dmt_client', 'docker-host') {
     }
     runStage('xref') {
       sh 'make wc_xref'
+    }
+    runStage('dialyze') {
+      sh 'make wc_dialyze'
+    }
+    runStage('test') {
+      sh "make wdeps_test"
     }
   }
 

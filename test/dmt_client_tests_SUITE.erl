@@ -48,12 +48,12 @@ application_stop(App) ->
 poll(_C) ->
     Object = fixture_domain_object(1, <<"InsertFixture">>),
     Ref = fixture_object_ref(1),
-    {'ObjectNotFound'} = (catch dmt_client_api:checkout_object({head, #'Head'{}}, Ref)),
-    #'Snapshot'{version = Version1} = dmt_client_api:checkout({head, #'Head'{}}),
-    Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}),
-    #'Snapshot'{version = Version1} = dmt_client:checkout({head, #'Head'{}}),
     object_not_found = (catch dmt_client:checkout_object({head, #'Head'{}}, Ref)),
-    ok = dmt_client_poller:poll(),
+    #'Snapshot'{version = Version1} = dmt_client:checkout({head, #'Head'{}}),
+    Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}),
+    true = Version1 < Version2,
+    %% TODO: replace with sleep(genlib_app:env(dmt_client, poll_interval))
+    {ok, _} = dmt_client_poller:poll(),
     #'Snapshot'{version = Version2} = dmt_client:checkout({head, #'Head'{}}),
     #'VersionedObject'{object = Object} = dmt_client:checkout_object({head, #'Head'{}}, Ref).
 
