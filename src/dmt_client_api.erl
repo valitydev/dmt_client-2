@@ -28,17 +28,16 @@ call(ServiceName, Function, Args) ->
     Port = integer_to_list(application:get_env(dmt, client_port, 8022)),
     {Path, Service} = get_handler_spec(ServiceName),
     Call = {Service, Function, Args},
-    Server = #{url => Host ++ ":" ++ Port ++ Path},
-    Context = woody_client:new_context(woody_client:make_id(<<"dmt_client">>), dmt_client_woody_event_handler),
-    case woody_client:call_safe(Context, Call, Server) of
-        {{exception, Exception}, _Context} ->
-            throw(Exception);
-        {{error, Error}, _Context} ->
-            error(Error);
-        {{ok, Response}, _Context} ->
+    Opts = #{
+        url => Host ++ ":" ++ Port ++ Path,
+        event_handler => {dmt_client_woody_event_handler, undefined}
+    }, 
+    Context = woody_context:new(),
+    case woody_client:call(Call, Opts, Context) of
+        {ok, Response} ->
             Response;
-        {Response, _Context} ->
-            Response
+        {exception, Exception} ->
+            throw(Exception)
     end.
 
 get_handler_spec(repository) ->

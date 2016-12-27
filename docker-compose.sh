@@ -12,12 +12,12 @@ services:
     links:
       - dominant
   dominant:
-    image: dr.rbkmoney.com/rbkmoney/dominant:f3c72168d9dfeb4da241d4eb5d6a29787c81faef
+    image: dr.rbkmoney.com/rbkmoney/dominant:3e59aea58d02bbe8648bf111b552900bc0a670b9
     command: /opt/dominant/bin/dominant foreground
     links:
       - machinegun
   machinegun:
-    image: dr.rbkmoney.com/rbkmoney/machinegun:a48f9e93dd5a709d5f14db0c9785d43039282e86
+    image: dr.rbkmoney.com/rbkmoney/machinegun:2c956c1172cf8f7b4a09512cd1571bdd4c57f1c1
     command: /opt/machinegun/bin/machinegun  foreground
     volumes:
       - ./test/machinegun/sys.config:/opt/machinegun/releases/0.1.0/sys.config
