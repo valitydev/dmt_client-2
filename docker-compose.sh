@@ -12,7 +12,7 @@ services:
     links:
       - dominant
   dominant:
-    image: dr.rbkmoney.com/rbkmoney/dominant:3e59aea58d02bbe8648bf111b552900bc0a670b9
+    image: dr.rbkmoney.com/rbkmoney/dominant:b79f1e6acf5fd07ac60a51f9551faca48115770f
     command: /opt/dominant/bin/dominant foreground
     links:
       - machinegun
