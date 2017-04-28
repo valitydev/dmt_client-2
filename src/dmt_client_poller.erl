@@ -73,7 +73,7 @@ start_timer(State = #state{timer = undefined}) ->
 
 -spec pull() -> dmt:version().
 pull() ->
-    OldHead = try 
+    OldHead = try
         dmt_cache:checkout_head()
     catch
         version_not_found ->
@@ -91,18 +91,9 @@ pull_safe() ->
         NewLastVersion = pull(),
         {ok, NewLastVersion}
     catch
-        error:{transport_error, Reason} when
-            % denial of service
-            Reason == server_error;
-            Reason == service_unavailable;
-            Reason == econnrefused;
-            % undefined result
-            Reason == timeout;
-            Reason == closed; % only if received after successful tcp send, otherwise denial of service
-            Reason == partial_response
+        error:{woody_error, {_Source, Class, _Details}} = Error when
+            Class == resource_unavailable;
+            Class == result_unknown
         ->
-            {error, Reason};
-        % undefined result
-        error:{transport_error, {http_code, 504}} ->
-            {error, gateway_timeout}
+            {error, Error}
     end.
