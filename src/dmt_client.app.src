@@ -7,7 +7,7 @@
         stdlib,
         lager,
         woody,
-        dmt
+        dmt_core
     ]},
     {mod, {dmt_client, []}},
     {env, []}

@@ -5,33 +5,35 @@
 -export([pull/1]).
 -export([checkout_object/2]).
 
+-spec commit(dmt_client:version(), dmt_client:commit()) -> dmt_client:version() | no_return().
 
--spec commit(dmt:version(), dmt:commit()) -> dmt:version().
 commit(Version, Commit) ->
-    call(repository, 'Commit', [Version, Commit]).
+    call('Repository', 'Commit', [Version, Commit]).
 
--spec checkout(dmt:ref()) -> dmt:snapshot().
+-spec checkout(dmt_client:ref()) -> dmt_client:snapshot() | no_return().
+
 checkout(Reference) ->
-    call(repository, 'Checkout', [Reference]).
+    call('Repository', 'Checkout', [Reference]).
 
--spec pull(dmt:version()) -> dmt:history().
+-spec pull(dmt_client:version()) -> dmt_client:history() | no_return().
+
 pull(Version) ->
-    call(repository, 'Pull', [Version]).
+    call('Repository', 'Pull', [Version]).
 
--spec checkout_object(dmt:ref(), dmt:object_ref()) -> dmt:domain_object().
+-spec checkout_object(dmt_client:ref(), dmt_client:object_ref()) -> dmsl_domain_thrift:'DomainObject'() | no_return().
+
 checkout_object(Reference, ObjectReference) ->
-    call(repository_client, 'checkoutObject', [Reference, ObjectReference]).
+    call('RepositoryClient', 'checkoutObject', [Reference, ObjectReference]).
 
 
 call(ServiceName, Function, Args) ->
-    Host = application:get_env(dmt, client_host, "dominant"),
-    Port = integer_to_list(application:get_env(dmt, client_port, 8022)),
-    {Path, Service} = get_handler_spec(ServiceName),
+    Url = get_service_url(ServiceName),
+    Service = get_service_modname(ServiceName),
     Call = {Service, Function, Args},
     Opts = #{
-        url => Host ++ ":" ++ Port ++ Path,
+        url => Url,
         event_handler => {dmt_client_woody_event_handler, undefined}
-    }, 
+    },
     Context = woody_context:new(),
     case woody_client:call(Call, Opts, Context) of
         {ok, Response} ->
@@ -40,9 +42,13 @@ call(ServiceName, Function, Args) ->
             throw(Exception)
     end.
 
-get_handler_spec(repository) ->
-    {"/v1/domain/repository",
-        {dmsl_domain_config_thrift, 'Repository'}};
-get_handler_spec(repository_client) ->
-    {"/v1/domain/repository_client",
-        {dmsl_domain_config_thrift, 'RepositoryClient'}}.
+get_service_url(ServiceName) ->
+    maps:get(ServiceName, genlib_app:env(dmt_client, service_urls)).
+
+get_service_modname(ServiceName) ->
+    {get_service_module(ServiceName), ServiceName}.
+
+get_service_module('Repository') ->
+    dmsl_domain_config_thrift;
+get_service_module('RepositoryClient') ->
+    dmsl_domain_config_thrift.

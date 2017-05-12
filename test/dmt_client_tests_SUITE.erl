@@ -5,7 +5,6 @@
 -export([groups/0]).
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
--export([application_stop/1]).
 -export([poll/1]).
 
 -include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
@@ -31,16 +30,18 @@ groups() ->
 %% starting/stopping
 -spec init_per_suite(term()) -> term().
 init_per_suite(C) ->
-    {ok, Apps} = application:ensure_all_started(dmt_client),
+    Apps = genlib_app:start_application_with(dmt_client, [
+        {cache_update_interval, 5000}, % milliseconds
+        {service_urls, #{
+            'Repository' => <<"dominant:8022/v1/domain/repository">>,
+            'RepositoryClient' => <<"dominant:8022/v1/domain/repository_client">>
+        }}
+    ]),
     [{apps, Apps}|C].
 
 -spec end_per_suite(term()) -> term().
 end_per_suite(C) ->
-    [application_stop(App) || App <- proplists:get_value(apps, C)].
-
--spec application_stop(term()) -> term().
-application_stop(App) ->
-    application:stop(App).
+    genlib_app:stop_unload_applications(proplists:get_value(apps, C)).
 
 %%
 %% tests
@@ -52,8 +53,7 @@ poll(_C) ->
     #'Snapshot'{version = Version1} = dmt_client:checkout({head, #'Head'{}}),
     Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}),
     true = Version1 < Version2,
-    %% TODO: replace with sleep(genlib_app:env(dmt_client, poll_interval))
-    {ok, _} = dmt_client_poller:poll(),
+    _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:checkout({head, #'Head'{}}),
     #'VersionedObject'{object = Object} = dmt_client:checkout_object({head, #'Head'{}}, Ref).
 
