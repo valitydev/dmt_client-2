@@ -36,7 +36,7 @@ start_link() ->
 -spec put(dmt_client:snapshot()) -> dmt_client:snapshot().
 
 put(Snapshot) ->
-    ok = gen_server:call(?SERVER, {put, Snapshot}),
+    ok = gen_server:cast(?SERVER, {put, Snapshot}),
     Snapshot.
 
 -spec get(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
@@ -47,7 +47,12 @@ get(Version) ->
 -spec get_latest() -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 
 get_latest() ->
-    latest_snapshot().
+    case latest_snapshot() of
+        {ok, Snapshot} ->
+            {ok, Snapshot};
+        {error, version_not_found} ->
+            gen_server:call(?SERVER, get_latest)
+    end.
 
 -spec update() -> {ok, dmt_client:version()} | {error, term()}.
 
@@ -77,16 +82,20 @@ init(_) ->
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
 
-handle_call({put, Snapshot}, _From, State) ->
-    {reply, put_snapshot(Snapshot), State};
-
 handle_call(update, _From, State) ->
     {reply, update_cache(), restart_timer(State)};
+
+handle_call(get_latest, _From, State) ->
+    {reply, latest_snapshot(), State};
 
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
+
+handle_cast({put, Snapshot}, State) ->
+    ok = put_snapshot(Snapshot),
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -114,7 +123,7 @@ code_change(_OldVsn, _State, _Extra) ->
 
 put_snapshot(Snapshot) ->
     true = ets:insert(?TABLE, Snapshot),
-    ok.
+    cleanup().
 
 -spec get_snapshot(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 
@@ -172,3 +181,38 @@ update_cache() ->
             {error, Error}
     end.
 
+-spec cleanup() -> ok.
+
+cleanup() ->
+    {Elements, Memory} = get_cache_size(),
+    CacheLimits = genlib_app:env(dmt_client, max_cache_size),
+    MaxElements = genlib_map:get(elements, CacheLimits, 20),
+    MaxMemory = genlib_map:get(memory, CacheLimits, 52428800), % 50Mb by default
+    case Elements > MaxElements orelse Memory > MaxMemory of
+        true ->
+            ok = remove_earliest(),
+            cleanup();
+        false ->
+            ok
+    end.
+
+-spec get_cache_size() -> {non_neg_integer(), non_neg_integer()}.
+
+get_cache_size() ->
+    WordSize = erlang:system_info(wordsize),
+    Info = ets:info(?TABLE),
+    {proplists:get_value(size, Info), WordSize * proplists:get_value(memory, Info)}.
+
+-spec remove_earliest() -> ok.
+
+remove_earliest() ->
+    % Naive implementation, but probably good enough
+    remove_earliest(ets:first(?TABLE)).
+
+-spec remove_earliest('$end_of_table' | dmt_client:version()) -> ok.
+
+remove_earliest('$end_of_table') ->
+    ok;
+remove_earliest(Key) ->
+    true = ets:delete(?TABLE, Key),
+    ok.
