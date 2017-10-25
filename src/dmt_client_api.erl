@@ -32,7 +32,7 @@ call(ServiceName, Function, Args) ->
     Call = {Service, Function, Args},
     Opts = #{
         url => Url,
-        event_handler => {dmt_client_woody_event_handler, undefined}
+        event_handler => scoper_woody_event_handler
     },
     Context = woody_context:new(),
     case woody_client:call(Call, Opts, Context) of
