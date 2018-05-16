@@ -33,7 +33,7 @@ call(ServiceName, Function, Args) ->
     Opts = #{
         url => Url,
         event_handler => scoper_woody_event_handler,
-        net_opts => [{recv_timeout, 60000}, {connect_timeout, 1000}]
+        transport_opts => [{recv_timeout, 60000}, {connect_timeout, 1000}]
     },
     Context = woody_context:new(),
     case woody_client:call(Call, Opts, Context) of
