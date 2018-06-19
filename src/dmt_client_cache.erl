@@ -166,11 +166,11 @@ update_cache() ->
     try
         NewHead = case latest_snapshot() of
             {ok, OldHead} ->
-                FreshHistory = dmt_client_api:pull(OldHead#'Snapshot'.version),
+                FreshHistory = dmt_client_api:pull(OldHead#'Snapshot'.version, undefined),
                 {ok, Head} = dmt_history:head(FreshHistory, OldHead),
                 Head;
             {error, version_not_found} ->
-                dmt_client_api:checkout({head, #'Head'{}})
+                dmt_client_api:checkout({head, #'Head'{}}, undefined)
         end,
         ok = put_snapshot(NewHead),
         {ok, NewHead#'Snapshot'.version}

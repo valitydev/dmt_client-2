@@ -7,8 +7,13 @@
 
 %% API
 -export([checkout/1]).
+-export([checkout/2]).
 -export([checkout_object/2]).
+-export([checkout_object/3]).
 -export([commit/2]).
+-export([commit/3]).
+-export([pull/1]).
+-export([pull/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -23,6 +28,7 @@
 -export_type([commit/0]).
 -export_type([object_ref/0]).
 -export_type([history/0]).
+-export_type([transport_opts/0]).
 
 -include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
 
@@ -32,12 +38,20 @@
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type history() :: dmsl_domain_config_thrift:'History'().
+-type transport_opts() :: woody_client_thrift_http_transport:options() | undefined.
 
 %% API
 
--spec checkout(ref()) -> snapshot() | no_return().
+-spec checkout(ref()) ->
+    snapshot() | no_return().
 
 checkout(Reference) ->
+    checkout(Reference, undefined).
+
+-spec checkout(ref(), transport_opts()) ->
+    snapshot() | no_return().
+
+checkout(Reference, Opts) ->
     CacheResult = case Reference of
         {head, #'Head'{}} ->
             dmt_client_cache:get_latest();
@@ -48,13 +62,20 @@ checkout(Reference) ->
         {ok, Snapshot} ->
             Snapshot;
         {error, version_not_found} ->
-            dmt_client_cache:put(dmt_client_api:checkout(Reference))
+            dmt_client_cache:put(dmt_client_api:checkout(Reference, Opts))
     end.
 
--spec checkout_object(ref(), object_ref()) -> dmsl_domain_config_thrift:'VersionedObject'() | no_return().
+-spec checkout_object(ref(), object_ref()) ->
+    dmsl_domain_config_thrift:'VersionedObject'() | no_return().
 
 checkout_object(Reference, ObjectReference) ->
-    #'Snapshot'{version = Version, domain = Domain} = checkout(Reference),
+    checkout_object(Reference, ObjectReference, undefined).
+
+-spec checkout_object(ref(), object_ref(), transport_opts()) ->
+    dmsl_domain_config_thrift:'VersionedObject'() | no_return().
+
+checkout_object(Reference, ObjectReference, Opts) ->
+    #'Snapshot'{version = Version, domain = Domain} = checkout(Reference, Opts),
     case dmt_domain:get_object(ObjectReference, Domain) of
         {ok, Object} ->
             #'VersionedObject'{version = Version, object = Object};
@@ -62,10 +83,29 @@ checkout_object(Reference, ObjectReference) ->
             throw(object_not_found)
     end.
 
--spec commit(version(), commit()) -> version() | no_return().
+-spec commit(version(), commit()) ->
+    version() | no_return().
 
 commit(Version, Commit) ->
-    dmt_client_api:commit(Version, Commit).
+    commit(Version, Commit, undefined).
+
+-spec commit(version(), commit(), transport_opts()) ->
+    version() | no_return().
+
+commit(Version, Commit, Opts) ->
+    dmt_client_api:commit(Version, Commit, Opts).
+
+-spec pull(version()) ->
+    history() | no_return().
+
+pull(Version) ->
+    pull(Version, undefined).
+
+-spec pull(version(), transport_opts()) ->
+    history() | no_return().
+
+pull(Version, Opts) ->
+    dmt_client_api:pull(Version, Opts).
 
 %% Supervisor callbacks
 
