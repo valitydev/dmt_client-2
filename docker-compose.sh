@@ -1,6 +1,6 @@
 #!/bin/bash
 cat <<EOF
-version: '2'
+version: '2.1'
 services:
   ${SERVICE_NAME}:
     image: ${BUILD_IMAGE}
@@ -9,22 +9,28 @@ services:
       - $HOME/.cache:/home/$UNAME/.cache
     working_dir: $PWD
     command: /sbin/init
-    links:
-      - dominant
+    depends_on:
+      dominant:
+        condition: service_healthy
   dominant:
-    image: dr.rbkmoney.com/rbkmoney/dominant:e6af73a005779d5714a1d3b9e310a12f69f6fb0c
+    image: dr.rbkmoney.com/rbkmoney/dominant:7dddf0d39cb2c58e0fb50276326901fcdd6672d7
     command: /opt/dominant/bin/dominant foreground
-    links:
-      - machinegun
+    depends_on:
+      machinegun:
+        condition: service_healthy
+    healthcheck:
+      test: "curl http://localhost:8022/"
+      interval: 5s
+      timeout: 1s
+      retries: 12
   machinegun:
-    image: dr.rbkmoney.com/rbkmoney/machinegun:e04e529f4c5682b527d12d73a13a3cf9eb296d4d
-    command: /opt/machinegun/bin/machinegun  foreground
+    image: dr.rbkmoney.com/rbkmoney/machinegun:c3980e3de6fb85f20a6d53d26e3866866d00c5d7
+    command: /opt/machinegun/bin/machinegun foreground
     volumes:
-      - ./test/machinegun/sys.config:/opt/machinegun/releases/0.1.0/sys.config
-networks:
-  default:
-    driver: bridge
-    driver_opts:
-      com.docker.network.enable_ipv6: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "false"
+      - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
+    healthcheck:
+      test: "curl http://localhost:8022/"
+      interval: 5s
+      timeout: 1s
+      retries: 12
 EOF
