@@ -53,7 +53,7 @@ end_per_suite(C) ->
 poll(_C) ->
     Object = fixture_domain_object(1, <<"InsertFixture">>),
     Ref = fixture_object_ref(1),
-    object_not_found = (catch dmt_client:checkout_object({head, #'Head'{}}, Ref)),
+    #'ObjectNotFound'{} = (catch dmt_client:checkout_object({head, #'Head'{}}, Ref)),
     #'Snapshot'{version = Version1} = dmt_client:checkout({head, #'Head'{}}),
     Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, undefined),
     true = Version1 < Version2,

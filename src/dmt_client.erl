@@ -80,7 +80,7 @@ checkout_object(Reference, ObjectReference, Opts) ->
         {ok, Object} ->
             #'VersionedObject'{version = Version, object = Object};
         error ->
-            throw(object_not_found)
+            throw(#'ObjectNotFound'{})
     end.
 
 -spec commit(version(), commit()) ->
