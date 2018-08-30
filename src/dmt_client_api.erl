@@ -2,7 +2,7 @@
 
 -export([commit/3]).
 -export([checkout/2]).
--export([pull/2]).
+-export([pull_range/3]).
 -export([checkout_object/3]).
 
 -spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
@@ -17,11 +17,11 @@ commit(Version, Commit, Opts) ->
 checkout(Reference, Opts) ->
     call('Repository', 'Checkout', [Reference], Opts).
 
--spec pull(dmt_client:version(), dmt_client:transport_opts()) ->
+-spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
 
-pull(Version, Opts) ->
-    call('Repository', 'Pull', [Version], Opts).
+pull_range(After, Limit, Opts) ->
+    call('Repository', 'PullRange', [After, Limit], Opts).
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().

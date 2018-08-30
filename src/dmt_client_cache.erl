@@ -22,6 +22,7 @@
 -define(TABLE, ?MODULE).
 -define(SERVER, ?MODULE).
 -define(DEFAULT_INTERVAL, 5000).
+-define(DEFAULT_LIMIT, 10).
 
 -include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
@@ -166,7 +167,8 @@ update_cache() ->
     try
         NewHead = case latest_snapshot() of
             {ok, OldHead} ->
-                FreshHistory = dmt_client_api:pull(OldHead#'Snapshot'.version, undefined),
+                Limit = genlib_app:env(dmt_client, cache_update_pull_limit, ?DEFAULT_LIMIT),
+                FreshHistory = dmt_client_api:pull_range(OldHead#'Snapshot'.version, Limit, undefined),
                 {ok, Head} = dmt_history:head(FreshHistory, OldHead),
                 Head;
             {error, version_not_found} ->

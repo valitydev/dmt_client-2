@@ -12,8 +12,8 @@
 -export([checkout_object/3]).
 -export([commit/2]).
 -export([commit/3]).
--export([pull/1]).
--export([pull/2]).
+-export([pull_range/2]).
+-export([pull_range/3]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -24,6 +24,7 @@
 
 -export_type([ref/0]).
 -export_type([version/0]).
+-export_type([limit/0]).
 -export_type([snapshot/0]).
 -export_type([commit/0]).
 -export_type([object_ref/0]).
@@ -34,6 +35,7 @@
 
 -type ref() :: dmsl_domain_config_thrift:'Reference'().
 -type version() :: dmsl_domain_config_thrift:'Version'().
+-type limit() :: dmsl_domain_config_thrift:'Limit'().
 -type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
@@ -95,17 +97,17 @@ commit(Version, Commit) ->
 commit(Version, Commit, Opts) ->
     dmt_client_api:commit(Version, Commit, Opts).
 
--spec pull(version()) ->
+-spec pull_range(version(), limit()) ->
     history() | no_return().
 
-pull(Version) ->
-    pull(Version, undefined).
+pull_range(Version, Limit) ->
+    pull_range(Version, Limit, undefined).
 
--spec pull(version(), transport_opts()) ->
+-spec pull_range(version(), limit(), transport_opts()) ->
     history() | no_return().
 
-pull(Version, Opts) ->
-    dmt_client_api:pull(Version, Opts).
+pull_range(Version, Limit, Opts) ->
+    dmt_client_api:pull_range(Version, Limit, Opts).
 
 %% Supervisor callbacks
 
