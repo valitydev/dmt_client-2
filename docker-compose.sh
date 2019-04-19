@@ -13,7 +13,7 @@ services:
       dominant:
         condition: service_healthy
   dominant:
-    image: dr.rbkmoney.com/rbkmoney/dominant:845e7a6ff7f1cf37568e6ffab5f1ea86c7a43f49
+    image: dr.rbkmoney.com/rbkmoney/dominant:410e9d8cd821b3b738eec2881e7737e021d9141b
     command: /opt/dominant/bin/dominant foreground
     depends_on:
       machinegun:
@@ -24,7 +24,7 @@ services:
       timeout: 1s
       retries: 12
   machinegun:
-    image: dr.rbkmoney.com/rbkmoney/machinegun:c3980e3de6fb85f20a6d53d26e3866866d00c5d7
+    image: dr2.rbkmoney.com/rbkmoney/machinegun:7e6c4251a801cc00dbf8340c723010d68e2d86f1
     command: /opt/machinegun/bin/machinegun foreground
     volumes:
       - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
