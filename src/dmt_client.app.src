@@ -5,6 +5,7 @@
     {applications, [
         kernel,
         stdlib,
+        lager,
         woody,
         scoper,
         dmt_core

@@ -59,10 +59,10 @@ get_service_module('RepositoryClient') ->
     dmsl_domain_config_thrift.
 
 -spec ensure_transport_opts(dmt_client:transport_opts()) ->
-    woody_client_thrift_http_transport:transport_options().
+    woody_client_thrift_http_transport:options().
 
-ensure_transport_opts(Opts) when is_map(Opts) ->
+ensure_transport_opts(Opts) when is_list(Opts) ->
     Opts;
 ensure_transport_opts(undefined) ->
-    Default = #{recv_timeout => 60000, connect_timeout => 1000},
+    Default = [{recv_timeout, 60000}, {connect_timeout, 1000}],
     genlib_app:env(dmt_client, transport_opts, Default).

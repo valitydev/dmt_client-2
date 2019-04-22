@@ -37,8 +37,8 @@ init_per_suite(C) ->
             memory => 2048 % 2Kb
         }},
         {service_urls, #{
-            'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-            'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
+            'Repository' => <<"dominant:8022/v1/domain/repository">>,
+            'RepositoryClient' => <<"dominant:8022/v1/domain/repository_client">>
         }}
     ]),
     [{apps, Apps}|C].

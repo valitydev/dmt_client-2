@@ -40,7 +40,7 @@
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type history() :: dmsl_domain_config_thrift:'History'().
--type transport_opts() :: woody_client_thrift_http_transport:transport_options() | undefined.
+-type transport_opts() :: woody_client_thrift_http_transport:options() | undefined.
 
 %% API
 
