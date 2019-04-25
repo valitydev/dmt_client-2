@@ -12,6 +12,7 @@
 -export([checkout_object/3]).
 -export([commit/2]).
 -export([commit/3]).
+-export([get_last_version/0]).
 -export([pull_range/2]).
 -export([pull_range/3]).
 
@@ -28,6 +29,8 @@
 -export_type([snapshot/0]).
 -export_type([commit/0]).
 -export_type([object_ref/0]).
+-export_type([domain_object/0]).
+-export_type([domain/0]).
 -export_type([history/0]).
 -export_type([transport_opts/0]).
 
@@ -39,10 +42,12 @@
 -type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
+-type domain_object() :: dmsl_domain_thrift:'DomainObject'().
+-type domain() :: dmsl_domain_thrift:'Domain'().
 -type history() :: dmsl_domain_config_thrift:'History'().
 -type transport_opts() :: woody_client_thrift_http_transport:options() | undefined.
 
-%% API
+%%% API
 
 -spec checkout(ref()) ->
     snapshot() | no_return().
@@ -54,17 +59,12 @@ checkout(Reference) ->
     snapshot() | no_return().
 
 checkout(Reference, Opts) ->
-    CacheResult = case Reference of
-        {head, #'Head'{}} ->
-            dmt_client_cache:get_latest();
-        {version, Version} ->
-            dmt_client_cache:get(Version)
-    end,
-    case CacheResult of
+    Version = ref_to_version(Reference),
+    case dmt_client_cache:get(Version, Opts) of
         {ok, Snapshot} ->
             Snapshot;
-        {error, version_not_found} ->
-            dmt_client_cache:put(dmt_client_api:checkout(Reference, Opts))
+        {error, Error} ->
+            erlang:error(Error)
     end.
 
 -spec checkout_object(ref(), object_ref()) ->
@@ -77,12 +77,14 @@ checkout_object(Reference, ObjectReference) ->
     dmsl_domain_config_thrift:'VersionedObject'() | no_return().
 
 checkout_object(Reference, ObjectReference, Opts) ->
-    #'Snapshot'{version = Version, domain = Domain} = checkout(Reference, Opts),
-    case dmt_domain:get_object(ObjectReference, Domain) of
+    Version = ref_to_version(Reference),
+    case dmt_client_cache:get_object(Version, ObjectReference, Opts) of
         {ok, Object} ->
             #'VersionedObject'{version = Version, object = Object};
-        error ->
-            throw(#'ObjectNotFound'{})
+        {error, {woody_error, _} = Error} ->
+            erlang:error(Error);
+        {error, _} ->
+            erlang:throw(#'ObjectNotFound'{})
     end.
 
 -spec commit(version(), commit()) ->
@@ -97,6 +99,12 @@ commit(Version, Commit) ->
 commit(Version, Commit, Opts) ->
     dmt_client_api:commit(Version, Commit, Opts).
 
+-spec get_last_version() ->
+    version().
+
+get_last_version() ->
+    dmt_client_cache:get_last_version().
+
 -spec pull_range(version(), limit()) ->
     history() | no_return().
 
@@ -109,7 +117,7 @@ pull_range(Version, Limit) ->
 pull_range(Version, Limit, Opts) ->
     dmt_client_api:pull_range(Version, Limit, Opts).
 
-%% Supervisor callbacks
+%%% Supervisor callbacks
 
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 
@@ -117,7 +125,7 @@ init([]) ->
     Cache = #{id => dmt_client_cache, start => {dmt_client_cache, start_link, []}, restart => permanent},
     {ok, {#{strategy => one_for_one, intensity => 10, period => 60}, [Cache]}}.
 
-%% Application callbacks
+%%% Application callbacks
 
 -spec start(normal, any()) -> {ok, pid()} | {error, any()}.
 
@@ -128,3 +136,13 @@ start(_StartType, _StartArgs) ->
 
 stop(_State) ->
     ok.
+
+%%% Internal functions
+
+-spec ref_to_version(ref()) ->
+    version().
+
+ref_to_version({version, Version}) ->
+    Version;
+ref_to_version({head, #'Head'{}}) ->
+    dmt_client_cache:get_last_version().

@@ -1,6 +1,8 @@
 # general
 log
 /_build/
+/.rebar3/
+/ebin/
 *~
 erl_crash.dump
 .tags*
