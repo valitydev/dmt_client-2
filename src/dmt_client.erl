@@ -97,7 +97,7 @@ commit(Version, Commit) ->
     version() | no_return().
 
 commit(Version, Commit, Opts) ->
-    dmt_client_api:commit(Version, Commit, Opts).
+    dmt_client_backend:commit(Version, Commit, Opts).
 
 -spec get_last_version() ->
     version().
@@ -115,7 +115,7 @@ pull_range(Version, Limit) ->
     history() | no_return().
 
 pull_range(Version, Limit, Opts) ->
-    dmt_client_api:pull_range(Version, Limit, Opts).
+    dmt_client_backend:pull_range(Version, Limit, Opts).
 
 %%% Supervisor callbacks
 

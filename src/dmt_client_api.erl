@@ -1,5 +1,7 @@
 -module(dmt_client_api).
 
+-behaviour(dmt_client_backend).
+
 -export([commit/3]).
 -export([checkout/2]).
 -export([pull_range/3]).
