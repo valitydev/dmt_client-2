@@ -45,7 +45,7 @@
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
 -type history() :: dmsl_domain_config_thrift:'History'().
--type transport_opts() :: woody_client_thrift_http_transport:options() | undefined.
+-type transport_opts() :: woody_client_thrift_http_transport:transport_options() | undefined.
 
 %%% API
 
