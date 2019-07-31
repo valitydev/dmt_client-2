@@ -34,7 +34,7 @@
 -export_type([history/0]).
 -export_type([transport_opts/0]).
 
--include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
 -type ref() :: dmsl_domain_config_thrift:'Reference'().
 -type version() :: dmsl_domain_config_thrift:'Version'().

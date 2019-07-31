@@ -27,7 +27,7 @@
 -define(DEFAULT_LIMIT, 10).
 -define(DEFAULT_CALL_TIMEOUT, 10000).
 
--include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
 -define(meta_table_opts, [

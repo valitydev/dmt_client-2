@@ -7,7 +7,7 @@
 -export([end_per_suite/1]).
 -export([poll/1]).
 
--include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
 %%
 %% tests descriptions
