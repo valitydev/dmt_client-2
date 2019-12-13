@@ -6,7 +6,6 @@
         kernel,
         stdlib,
         woody,
-        scoper,
         dmt_core
     ]},
     {mod, {dmt_client, []}},
