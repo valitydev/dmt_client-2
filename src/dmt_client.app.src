@@ -6,8 +6,7 @@
         kernel,
         stdlib,
         woody,
-        dmt_core,
-        erl_health
+        dmt_core
     ]},
     {mod, {dmt_client, []}},
     {env, []}
