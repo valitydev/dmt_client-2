@@ -9,7 +9,7 @@ TEMPLATES_PATH := .
 SERVICE_NAME := dmt_client
 
 # Build image tag to be used
-BUILD_IMAGE_TAG := cd38c35976f3684fe7552533b6175a4c3460e88b
+BUILD_IMAGE_TAG := 07d3946f8f005782697de20270ac58cdcd18b011
 
 CALL_ANYWHERE := all submodules rebar-update compile xref lint dialyze check clean distclean
 CALL_W_CONTAINER := $(CALL_ANYWHERE) test
