@@ -11,25 +11,25 @@
     dmt_client:version() | no_return().
 
 commit(Version, Commit, Opts) ->
-    call('Repository', 'Commit', [Version, Commit], Opts).
+    call('Repository', 'Commit', {Version, Commit}, Opts).
 
 -spec checkout(dmt_client:ref(), dmt_client:transport_opts()) ->
     dmt_client:snapshot() | no_return().
 
 checkout(Reference, Opts) ->
-    call('Repository', 'Checkout', [Reference], Opts).
+    call('Repository', 'Checkout', {Reference}, Opts).
 
 -spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
 
 pull_range(After, Limit, Opts) ->
-    call('Repository', 'PullRange', [After, Limit], Opts).
+    call('Repository', 'PullRange', {After, Limit}, Opts).
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().
 
 checkout_object(Reference, ObjectReference, Opts) ->
-    call('RepositoryClient', 'checkoutObject', [Reference, ObjectReference], Opts).
+    call('RepositoryClient', 'checkoutObject', {Reference, ObjectReference}, Opts).
 
 
 call(ServiceName, Function, Args, TransportOpts) ->
