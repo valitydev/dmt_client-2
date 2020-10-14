@@ -1,4 +1,5 @@
 -module(dmt_client_cache_SUITE).
+
 -include_lib("common_test/include/ct.hrl").
 
 -export([all/0]).
@@ -31,17 +32,13 @@
 
 %%% Common test callbacks
 
--spec all() ->
-    [testcase_or_group()].
-
+-spec all() -> [testcase_or_group()].
 all() ->
     [
         {group, main}
     ].
 
--spec groups() ->
-    [{atom(), list(), [testcase_or_group()]}].
-
+-spec groups() -> [{atom(), list(), [testcase_or_group()]}].
 groups() ->
     [
         {main, [parallel, shuffle], [
@@ -57,33 +54,30 @@ groups() ->
         {object_not_found, [parallel], lists:duplicate(?tests_count, object_not_found)},
         {mixed, [parallel, shuffle],
             lists:duplicate(?tests_count, get_snapshot_success) ++
-            lists:duplicate(?tests_count, snapshot_not_found) ++
-            lists:duplicate(?tests_count, woody_error) ++
-            lists:duplicate(?tests_count, object_not_found)
-        }
+                lists:duplicate(?tests_count, snapshot_not_found) ++
+                lists:duplicate(?tests_count, woody_error) ++
+                lists:duplicate(?tests_count, object_not_found)}
     ].
 
--spec init_per_suite(config()) ->
-    config().
-
+-spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
     Apps = genlib_app:start_application_with(dmt_client, [
         {api_module, ?MODULE},
-        {cache_update_interval, 5000}, % milliseconds
+        % milliseconds
+        {cache_update_interval, 5000},
         {max_cache_size, #{
             elements => 1,
-            memory => 2048 % 2Kb
+            % 2Kb
+            memory => 2048
         }},
         {service_urls, #{
             'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
             'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
         }}
     ]),
-    [{apps, Apps}|C].
+    [{apps, Apps} | C].
 
--spec end_per_suite(config()) ->
-    any().
-
+-spec end_per_suite(config()) -> any().
 end_per_suite(C) ->
     genlib_app:stop_unload_applications(?config(apps, C)).
 
@@ -91,63 +85,47 @@ end_per_suite(C) ->
 
 -spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
     dmt_client:version() | no_return().
-
 commit(Version, _Commit, _Opts) ->
     Version.
 
--spec checkout(dmt_client:ref(), dmt_client:transport_opts()) ->
-    dmt_client:snapshot() | no_return().
-
+-spec checkout(dmt_client:ref(), dmt_client:transport_opts()) -> dmt_client:snapshot() | no_return().
 checkout({version, ?notfound_version}, _Opts) ->
     erlang:throw(#'VersionNotFound'{});
-
 checkout({version, ?unavailable_version}, _Opts) ->
     woody_error:raise(system, {external, resource_unavailable, <<"test">>});
-
 checkout({version, ?existing_version}, _Opts) ->
     timer:sleep(5000),
     #'Snapshot'{version = ?existing_version, domain = dmt_domain:new()};
-
 checkout({head, #'Head'{}}, _Opts) ->
     timer:sleep(5000),
     #'Snapshot'{version = ?existing_version, domain = dmt_domain:new()}.
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().
-
 checkout_object(_Reference, _ObjectReference, _Opts) ->
     erlang:throw(#'ObjectNotFound'{}).
 
 -spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
-
 pull_range(_Version, _Limit, _Opts) ->
     timer:sleep(5000),
     #{}.
 
 %%% Tests
 
--spec get_snapshot_success(config()) ->
-    any().
-
+-spec get_snapshot_success(config()) -> any().
 get_snapshot_success(_C) ->
     {ok, #'Snapshot'{}} = dmt_client_cache:get(?existing_version).
 
--spec snapshot_not_found(config()) ->
-    any().
-
+-spec snapshot_not_found(config()) -> any().
 snapshot_not_found(_C) ->
     {error, version_not_found} = dmt_client_cache:get(1).
 
--spec woody_error(config()) ->
-    any().
-
+-spec woody_error(config()) -> any().
 woody_error(_C) ->
     {error, {woody_error, _}} = dmt_client_cache:get(?unavailable_version).
 
--spec object_not_found(config()) ->
-    any().
-
+-spec object_not_found(config()) -> any().
 object_not_found(_C) ->
     Ref = {category, #'domain_CategoryRef'{id = 1}},
     {error, version_not_found} = dmt_client_cache:get_object(?notfound_version, Ref),

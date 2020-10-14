@@ -9,28 +9,22 @@
 
 -spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
     dmt_client:version() | no_return().
-
 commit(Version, Commit, Opts) ->
     call('Repository', 'Commit', {Version, Commit}, Opts).
 
--spec checkout(dmt_client:ref(), dmt_client:transport_opts()) ->
-    dmt_client:snapshot() | no_return().
-
+-spec checkout(dmt_client:ref(), dmt_client:transport_opts()) -> dmt_client:snapshot() | no_return().
 checkout(Reference, Opts) ->
     call('Repository', 'Checkout', {Reference}, Opts).
 
 -spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
-
 pull_range(After, Limit, Opts) ->
     call('Repository', 'PullRange', {After, Limit}, Opts).
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().
-
 checkout_object(Reference, ObjectReference, Opts) ->
     call('RepositoryClient', 'checkoutObject', {Reference, ObjectReference}, Opts).
-
 
 call(ServiceName, Function, Args, TransportOpts) ->
     Url = get_service_url(ServiceName),
@@ -38,7 +32,7 @@ call(ServiceName, Function, Args, TransportOpts) ->
     Call = {Service, Function, Args},
     Opts = #{
         url => Url,
-        event_handler  => get_event_handlers(),
+        event_handler => get_event_handlers(),
         transport_opts => ensure_transport_opts(TransportOpts)
     },
     Context = woody_context:new(),
@@ -63,9 +57,7 @@ get_service_module('RepositoryClient') ->
 get_event_handlers() ->
     genlib_app:env(dmt_client, woody_event_handlers, []).
 
--spec ensure_transport_opts(dmt_client:transport_opts()) ->
-    woody_client_thrift_http_transport:transport_options().
-
+-spec ensure_transport_opts(dmt_client:transport_opts()) -> woody_client_thrift_http_transport:transport_options().
 ensure_transport_opts(Opts) when is_map(Opts) ->
     Opts;
 ensure_transport_opts(undefined) ->

@@ -1,4 +1,5 @@
 -module(dmt_client_tests_SUITE).
+
 -include_lib("common_test/include/ct.hrl").
 
 -export([all/0]).
@@ -31,17 +32,19 @@ groups() ->
 -spec init_per_suite(term()) -> term().
 init_per_suite(C) ->
     Apps = genlib_app:start_application_with(dmt_client, [
-        {cache_update_interval, 5000}, % milliseconds
+        % milliseconds
+        {cache_update_interval, 5000},
         {max_cache_size, #{
             elements => 1,
-            memory => 2048 % 2Kb
+            % 2Kb
+            memory => 2048
         }},
         {service_urls, #{
             'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
             'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
         }}
     ]),
-    [{apps, Apps}|C].
+    [{apps, Apps} | C].
 
 -spec end_per_suite(term()) -> term().
 end_per_suite(C) ->

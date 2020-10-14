@@ -11,7 +11,7 @@ SERVICE_NAME := dmt_client
 # Build image tag to be used
 BUILD_IMAGE_TAG := 07d3946f8f005782697de20270ac58cdcd18b011
 
-CALL_ANYWHERE := all submodules rebar-update compile xref lint dialyze check clean distclean
+CALL_ANYWHERE := all submodules rebar-update compile xref lint dialyze check clean distclean check_format format
 CALL_W_CONTAINER := $(CALL_ANYWHERE) test
 
 all: compile
@@ -37,6 +37,12 @@ xref: submodules
 
 lint:
 	elvis rock
+
+check_format:
+	$(REBAR) fmt -c
+
+format:
+	$(REBAR) fmt -w
 
 dialyze: submodules
 	$(REBAR) as dialyze dialyzer

@@ -2,6 +2,7 @@
 %%% @end
 
 -module(dmt_client).
+
 -behaviour(supervisor).
 -behaviour(application).
 
@@ -52,15 +53,11 @@
 
 %%% API
 
--spec checkout(ref()) ->
-    snapshot() | no_return().
-
+-spec checkout(ref()) -> snapshot() | no_return().
 checkout(Reference) ->
     checkout(Reference, undefined).
 
--spec checkout(ref(), transport_opts()) ->
-    snapshot() | no_return().
-
+-spec checkout(ref(), transport_opts()) -> snapshot() | no_return().
 checkout(Reference, Opts) ->
     Version = ref_to_version(Reference),
     case dmt_client_cache:get(Version, Opts) of
@@ -70,15 +67,12 @@ checkout(Reference, Opts) ->
             erlang:error(Error)
     end.
 
--spec checkout_object(ref(), object_ref()) ->
-    dmsl_domain_config_thrift:'VersionedObject'() | no_return().
-
+-spec checkout_object(ref(), object_ref()) -> dmsl_domain_config_thrift:'VersionedObject'() | no_return().
 checkout_object(Reference, ObjectReference) ->
     checkout_object(Reference, ObjectReference, undefined).
 
 -spec checkout_object(ref(), object_ref(), transport_opts()) ->
     dmsl_domain_config_thrift:'VersionedObject'() | no_return().
-
 checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     case dmt_client_cache:get_object(Version, ObjectReference, Opts) of
@@ -90,41 +84,29 @@ checkout_object(Reference, ObjectReference, Opts) ->
             erlang:throw(#'ObjectNotFound'{})
     end.
 
--spec commit(version(), commit()) ->
-    version() | no_return().
-
+-spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
     commit(Version, Commit, undefined).
 
--spec commit(version(), commit(), transport_opts()) ->
-    version() | no_return().
-
+-spec commit(version(), commit(), transport_opts()) -> version() | no_return().
 commit(Version, Commit, Opts) ->
     dmt_client_backend:commit(Version, Commit, Opts).
 
--spec get_last_version() ->
-    version().
-
+-spec get_last_version() -> version().
 get_last_version() ->
     dmt_client_cache:get_last_version().
 
--spec pull_range(version(), limit()) ->
-    history() | no_return().
-
+-spec pull_range(version(), limit()) -> history() | no_return().
 pull_range(Version, Limit) ->
     pull_range(Version, Limit, undefined).
 
--spec pull_range(version(), limit(), transport_opts()) ->
-    history() | no_return().
-
+-spec pull_range(version(), limit(), transport_opts()) -> history() | no_return().
 pull_range(Version, Limit, Opts) ->
     dmt_client_backend:pull_range(Version, Limit, Opts).
 
 %% Health check API
 
--spec health_check() ->
-    erl_health:result().
-
+-spec health_check() -> erl_health:result().
 health_check() ->
     try
         _ = dmt_client_cache:get_last_version(),
@@ -137,7 +119,6 @@ health_check() ->
 %%% Supervisor callbacks
 
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
-
 init([]) ->
     Cache = #{id => dmt_client_cache, start => {dmt_client_cache, start_link, []}, restart => permanent},
     {ok, {#{strategy => one_for_one, intensity => 10, period => 60}, [Cache]}}.
@@ -145,20 +126,16 @@ init([]) ->
 %%% Application callbacks
 
 -spec start(normal, any()) -> {ok, pid()} | {error, any()}.
-
 start(_StartType, _StartArgs) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 -spec stop(any()) -> ok.
-
 stop(_State) ->
     ok.
 
 %%% Internal functions
 
--spec ref_to_version(ref()) ->
-    version().
-
+-spec ref_to_version(ref()) -> version().
 ref_to_version({version, Version}) ->
     Version;
 ref_to_version({head, #'Head'{}}) ->
