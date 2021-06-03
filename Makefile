@@ -9,7 +9,8 @@ TEMPLATES_PATH := .
 SERVICE_NAME := dmt_client
 
 # Build image tag to be used
-BUILD_IMAGE_TAG := 07d3946f8f005782697de20270ac58cdcd18b011
+BUILD_IMAGE_NAME := build-erlang
+BUILD_IMAGE_TAG := eb6f9920868599f7e1a8ee9aaedb1921a027f7a0
 
 CALL_ANYWHERE := all submodules rebar-update compile xref lint dialyze check clean distclean check_format format
 CALL_W_CONTAINER := $(CALL_ANYWHERE) test
@@ -57,5 +58,4 @@ clean:
 	$(REBAR) clean
 
 distclean:
-	$(REBAR) clean -a
-	rm -rfv _build _builds _cache _steps _temp
+	rm -rfv _build
