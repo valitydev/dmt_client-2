@@ -92,11 +92,11 @@ get(Version) ->
 -spec get(dmt_client:version(), dmt_client:transport_opts()) ->
     {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
 get(Version, Opts) ->
-    case get_snapshot(Version) of
-        {ok, _Snapshot} = Result ->
-            Result;
-        {error, version_not_found} ->
-            call({get_snapshot, Version, Opts})
+    case ensure_version(Version, Opts) of
+        {ok, _Reference} ->
+            get_snapshot(Version);
+        {error, _} = Error ->
+            Error
     end.
 
 -spec get_object(dmt_client:version(), dmt_client:object_ref()) ->
@@ -107,13 +107,15 @@ get_object(Version, ObjectRef) ->
 -spec get_object(dmt_client:version(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
 get_object(Version, ObjectRef, Opts) ->
-    case do_get_object(Version, ObjectRef) of
-        {ok, _Object} = Result ->
-            Result;
-        {error, version_not_found} ->
-            call({get_object, Version, ObjectRef, Opts});
-        {error, object_not_found} = NotFound ->
-            NotFound
+    case ensure_version(Version, Opts) of
+        {ok, _Reference} -> do_get_object(Version, ObjectRef);
+        {error, _} = Error -> Error
+    end.
+
+ensure_version(Version, Opts) ->
+    case ets:member(?TABLE, Version) of
+        true -> {ok, Version};
+        false -> call({fetch_version, Version, Opts})
     end.
 
 -spec get_last_version() -> dmt_client:version() | no_return().
@@ -142,39 +144,22 @@ init(_) ->
     {ok, #state{}, 0}.
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call({get_object, Version, ObjectRef, Opts}, From, #state{waiters = Waiters} = State) ->
-    case do_get_object(Version, ObjectRef) of
-        {ok, _Object} = Result ->
-            {reply, Result, State};
-        {error, object_not_found} = NotFound ->
-            {reply, NotFound, State};
-        {error, version_not_found} ->
-            DispatchFun = dispatch_object(ObjectRef),
+handle_call({fetch_version, Version, Opts}, From, #state{waiters = Waiters} = State) ->
+    case ets:member(?TABLE, Version) of
+        true ->
+            {reply, {ok, Version}, State};
+        false ->
+            DispatchFun = fun(ReplyTo, Result) -> gen_server:reply(ReplyTo, Result) end,
             NewWaiters = maybe_fetch({version, Version}, From, DispatchFun, Waiters, Opts),
             {noreply, State#state{waiters = NewWaiters}}
     end;
 handle_call(update, From, State) ->
     update_cache(From, State);
-handle_call({get_snapshot, Version, Opts}, From, #state{waiters = Waiters} = State) ->
-    case get_snapshot(Version) of
-        {ok, _Snapshot} = Result ->
-            {reply, Result, State};
-        {error, version_not_found} ->
-            DispatchFun = fun dispatch_snapshot/2,
-            NewWaiters = maybe_fetch({version, Version}, From, DispatchFun, Waiters, Opts),
-            {noreply, State#state{waiters = NewWaiters}}
-    end;
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
-    case Result of
-        {ok, Snapshot} ->
-            put_snapshot(Snapshot);
-        _ ->
-            ok
-    end,
     _ = [DispatchFun(From, Result) || {From, DispatchFun} <- maps:get(Reference, Waiters, [])],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
 handle_cast(_Msg, State) ->
@@ -220,12 +205,16 @@ cast(Msg) ->
     gen_server:cast(?SERVER, Msg).
 
 -spec put_snapshot(dmt_client:snapshot()) -> ok.
-put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
+put_snapshot(Snapshot) ->
+    put_snapshot(whereis(?SERVER), Snapshot).
+
+-spec put_snapshot(pid(), dmt_client:snapshot()) -> ok.
+put_snapshot(TableOwner, #'Snapshot'{version = Version, domain = Domain}) ->
     case get_snap(Version) of
         {ok, _Snap} ->
             ok;
         {error, version_not_found} ->
-            TID = ets:new(?MODULE, ?snapshot_table_opts),
+            TID = ets:new(?MODULE, [{heir, TableOwner, ok}] ++ ?snapshot_table_opts),
             true = put_domain_to_table(TID, Domain),
             Snap = #snap{
                 vsn = Version,
@@ -272,16 +261,7 @@ get_all_snaps() ->
 -spec do_get_object(dmt_client:version(), dmt_client:object_ref()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
 do_get_object(Version, ObjectRef) ->
-    case get_snap(Version) of
-        {ok, Snap} ->
-            get_object_by_snap(Snap, ObjectRef);
-        {error, version_not_found} = Error ->
-            Error
-    end.
-
--spec get_object_by_snap(snap(), dmt_client:object_ref()) ->
-    {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
-get_object_by_snap(#snap{tid = TID}, ObjectRef) ->
+    {ok, #snap{tid = TID}} = get_snap(Version),
     try ets:lookup(TID, ObjectRef) of
         [#object{obj = Object}] ->
             {ok, Object};
@@ -293,16 +273,6 @@ get_object_by_snap(#snap{tid = TID}, ObjectRef) ->
             {error, version_not_found}
     end.
 
--spec get_object_from_snapshot(dmt_client:object_ref(), dmt_client:snapshot()) ->
-    {ok, dmt_client:domain_object()} | {error, object_not_found}.
-get_object_from_snapshot(ObjectRef, #'Snapshot'{domain = Domain}) ->
-    case dmt_domain:get_object(ObjectRef, Domain) of
-        {ok, _Object} = Result ->
-            Result;
-        error ->
-            {error, object_not_found}
-    end.
-
 -spec update_cache(from() | undefined, state()) -> {noreply, state()}.
 update_cache(From, #state{waiters = Waiters} = State) ->
     DispatchFun = fun dispatch_update/2,
@@ -311,7 +281,7 @@ update_cache(From, #state{waiters = Waiters} = State) ->
 
 -spec maybe_fetch(dmt_client:ref(), from() | undefined, dispatch_fun(), waiters(), dmt_client:transport_opts()) ->
     waiters().
-maybe_fetch(Reference, From, DispatchFun, Waiters, Opts) ->
+maybe_fetch(Reference, ReplyTo, DispatchFun, Waiters, Opts) ->
     Prev =
         case maps:find(Reference, Waiters) of
             error ->
@@ -320,13 +290,20 @@ maybe_fetch(Reference, From, DispatchFun, Waiters, Opts) ->
             {ok, List} ->
                 List
         end,
-    Waiters#{Reference => [{From, DispatchFun} | Prev]}.
+    Waiters#{Reference => [{ReplyTo, DispatchFun} | Prev]}.
 
 -spec schedule_fetch(dmt_client:ref(), dmt_client:transport_opts()) -> pid().
 schedule_fetch(Reference, Opts) ->
     proc_lib:spawn_link(
         fun() ->
-            Result = fetch(Reference, Opts),
+            Result =
+                case fetch(Reference, Opts) of
+                    {ok, Snapshot} ->
+                        put_snapshot(Snapshot),
+                        {ok, Reference};
+                    {error, _} = Error ->
+                        Error
+                end,
             cast({dispatch, Reference, Result})
         end
     ).
@@ -357,30 +334,10 @@ do_fetch({head, #'Head'{}}, Opts) ->
 do_fetch(Reference, Opts) ->
     dmt_client_backend:checkout(Reference, Opts).
 
--spec dispatch_snapshot(from() | undefined, fetch_result()) -> ok.
-dispatch_snapshot(undefined, _Result) ->
-    ok;
-dispatch_snapshot(From, Result) ->
-    _ = gen_server:reply(From, Result),
-    ok.
-
--spec dispatch_object(dmt_client:object_ref()) -> dispatch_fun().
-dispatch_object(ObjectRef) ->
-    fun(From, Result) ->
-        Reply =
-            case Result of
-                {ok, Snapshot} ->
-                    get_object_from_snapshot(ObjectRef, Snapshot);
-                Error ->
-                    Error
-            end,
-        gen_server:reply(From, Reply)
-    end.
-
 -spec dispatch_update(from() | undefined, fetch_result()) -> ok.
 dispatch_update(undefined, _Result) ->
     ok;
-dispatch_update(From, {ok, #'Snapshot'{version = Version}}) ->
+dispatch_update(From, {ok, {version, Version}}) ->
     _ = gen_server:reply(From, {ok, Version}),
     ok;
 dispatch_update(From, Error) ->
@@ -514,14 +471,15 @@ timestamp() ->
 -spec cleanup_test() -> ok.
 cleanup_test() ->
     application:set_env(dmt_client, max_cache_size, #{elements => 2, memory => 52428800}),
+    S = self(),
     ok = create_tables(),
-    ok = put_snapshot(#'Snapshot'{version = 4, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 4, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
-    ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 3, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
-    ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 2, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
-    ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 1, domain = dmt_domain:new()}),
     [
         #snap{vsn = 1, _ = _},
         #snap{vsn = 4, _ = _}
@@ -532,15 +490,16 @@ cleanup_test() ->
 last_access_test() ->
     application:set_env(dmt_client, max_cache_size, #{elements => 3, memory => 52428800}),
     % Tables already created in cleanup_test/0
-    ok = put_snapshot(#'Snapshot'{version = 4, domain = dmt_domain:new()}),
+    S = self(),
+    ok = put_snapshot(S, #'Snapshot'{version = 4, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
-    ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 3, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
-    ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 2, domain = dmt_domain:new()}),
     ok = timer:sleep(1),
     Ref = {category, #'domain_CategoryRef'{id = 1}},
     {error, object_not_found} = get_object(3, Ref),
-    ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    ok = put_snapshot(S, #'Snapshot'{version = 1, domain = dmt_domain:new()}),
     [
         #snap{vsn = 1, _ = _},
         #snap{vsn = 3, _ = _},
