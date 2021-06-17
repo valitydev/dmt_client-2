@@ -7,10 +7,12 @@
 -behaviour(application).
 
 %% API
--export([checkout/1]).
--export([checkout/2]).
--export([checkout_object/2]).
--export([checkout_object/3]).
+-export([get_snapshot/1]).
+-export([get_snapshot/2]).
+-export([get/2]).
+-export([get/3]).
+-export([get_versioned/2]).
+-export([get_versioned/3]).
 -export([commit/2]).
 -export([commit/3]).
 -export([get_last_version/0]).
@@ -47,42 +49,44 @@
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
+-type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
 -type history() :: dmsl_domain_config_thrift:'History'().
 -type transport_opts() :: woody_client_thrift_http_transport:transport_options() | undefined.
 
 %%% API
 
--spec checkout(ref()) -> snapshot() | no_return().
-checkout(Reference) ->
-    checkout(Reference, undefined).
+-spec get_snapshot(ref()) -> snapshot() | no_return().
+get_snapshot(Reference) ->
+    get_snapshot(Reference, undefined).
 
--spec checkout(ref(), transport_opts()) -> snapshot() | no_return().
-checkout(Reference, Opts) ->
+-spec get_snapshot(ref(), transport_opts()) -> snapshot() | no_return().
+get_snapshot(Reference, Opts) ->
     Version = ref_to_version(Reference),
-    case dmt_client_cache:get(Version, Opts) of
+    case dmt_client_cache:get_snapshot(Version, Opts) of
         {ok, Snapshot} ->
             Snapshot;
         {error, Error} ->
             erlang:error(Error)
     end.
 
--spec checkout_object(ref(), object_ref()) -> dmsl_domain_config_thrift:'VersionedObject'() | no_return().
-checkout_object(Reference, ObjectReference) ->
-    checkout_object(Reference, ObjectReference, undefined).
+-spec get(ref(), object_ref()) -> domain_object() | no_return().
+get(Reference, ObjectReference) ->
+    get(Reference, ObjectReference, undefined).
 
--spec checkout_object(ref(), object_ref(), transport_opts()) ->
-    dmsl_domain_config_thrift:'VersionedObject'() | no_return().
-checkout_object(Reference, ObjectReference, Opts) ->
+-spec get(ref(), object_ref(), transport_opts()) -> domain_object() | no_return().
+get(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    case dmt_client_cache:get_object(Version, ObjectReference, Opts) of
-        {ok, Object} ->
-            #'VersionedObject'{version = Version, object = Object};
-        {error, {woody_error, _} = Error} ->
-            erlang:error(Error);
-        {error, _} ->
-            erlang:throw(#'ObjectNotFound'{})
-    end.
+    unwrap(dmt_client_cache:get_object(Version, ObjectReference, Opts)).
+
+-spec get_versioned(ref(), object_ref()) -> versioned_object() | no_return().
+get_versioned(Reference, ObjectReference) ->
+    get_versioned(Reference, ObjectReference, undefined).
+
+-spec get_versioned(ref(), object_ref(), transport_opts()) -> versioned_object() | no_return().
+get_versioned(Reference, ObjectReference, Opts) ->
+    Version = ref_to_version(Reference),
+    #'VersionedObject'{version = Version, object = get(Reference, ObjectReference, Opts)}.
 
 -spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
@@ -134,6 +138,11 @@ stop(_State) ->
     ok.
 
 %%% Internal functions
+
+unwrap({ok, Acc}) -> Acc;
+unwrap({error, {woody_error, _} = Error}) -> erlang:error(Error);
+%% DISCUSS: shouldn't version_not_found be handled some other way?
+unwrap({error, _}) -> erlang:throw(#'ObjectNotFound'{}).
 
 -spec ref_to_version(ref()) -> version().
 ref_to_version({version, Version}) ->
