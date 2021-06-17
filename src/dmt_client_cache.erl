@@ -97,7 +97,7 @@ start_link() ->
     {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
 get_snapshot(Version, Opts) ->
     case ensure_version(Version, Opts) of
-        {ok, _Reference} ->
+        {ok, Version} ->
             do_get_snapshot(Version);
         {error, _} = Error ->
             Error
@@ -107,7 +107,7 @@ get_snapshot(Version, Opts) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
 get(Version, ObjectRef, Opts) ->
     case ensure_version(Version, Opts) of
-        {ok, _Reference} -> do_get(Version, ObjectRef);
+        {ok, Version} -> do_get(Version, ObjectRef);
         {error, _} = Error -> Error
     end.
 
@@ -115,7 +115,7 @@ get(Version, ObjectRef, Opts) ->
     {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
 get_by_type(Version, ObjectType, Opts) ->
     case ensure_version(Version, Opts) of
-        {ok, _Reference} -> do_get_by_type(Version, ObjectType);
+        {ok, Version} -> do_get_by_type(Version, ObjectType);
         {error, _} = Error -> Error
     end.
 
@@ -123,7 +123,7 @@ get_by_type(Version, ObjectType, Opts) ->
     {ok, Acc} | {error, version_not_found | woody_error()}.
 fold(Version, Folder, Acc, Opts) ->
     case ensure_version(Version, Opts) of
-        {ok, _Reference} -> do_fold(Version, Folder, Acc);
+        {ok, Version} -> do_fold(Version, Folder, Acc);
         {error, _} = Error -> Error
     end.
 
@@ -141,9 +141,9 @@ get_last_version() ->
             end
     end.
 
--spec update() -> {ok, dmt_client:version()} | {error, woody_error()}.
+-spec update() -> {ok, dmt_client:ref()} | {error, woody_error()}.
 update() ->
-    call(update).
+    call({fetch_version, {head, #'Head'{}}, undefined, true}).
 
 %%% gen_server callbacks
 
@@ -153,17 +153,23 @@ init(_) ->
     {ok, #state{}, 0}.
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call({fetch_version, Version, Opts}, From, #state{waiters = Waiters} = State) ->
-    case ets:member(?TABLE, Version) of
-        true ->
-            {reply, {ok, Version}, State};
+handle_call({fetch_version, Reference, Opts, RestartTimer}, From, State) ->
+    {MustFetch, Version} =
+        case Reference of
+            {head, _} -> {true, undefined};
+            {version, V} -> {not ets:member(?TABLE, V), V}
+        end,
+
+    case MustFetch of
         false ->
-            DispatchFun = fun(ReplyTo, Result) -> gen_server:reply(ReplyTo, Result) end,
-            NewWaiters = maybe_fetch({version, Version}, From, DispatchFun, Waiters, Opts),
-            {noreply, State#state{waiters = NewWaiters}}
+            {reply, {ok, Version}, State};
+        true ->
+            NewState = fetch_version(Reference, From, Opts, State),
+            case RestartTimer of
+                true -> {noreply, restart_timer(NewState)};
+                false -> {noreply, NewState}
+            end
     end;
-handle_call(update, From, State) ->
-    update_cache(From, State);
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
@@ -176,7 +182,8 @@ handle_cast(_Msg, State) ->
 
 -spec handle_info(term(), state()) -> {noreply, state()}.
 handle_info(timeout, State) ->
-    update_cache(undefined, State);
+    NewState = fetch_version({head, #'Head'{}}, undefined, undefined, State),
+    {noreply, restart_timer(NewState)};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
@@ -216,7 +223,7 @@ cast(Msg) ->
 ensure_version(Version, Opts) ->
     case ets:member(?TABLE, Version) of
         true -> {ok, Version};
-        false -> call({fetch_version, Version, Opts})
+        false -> call({fetch_version, {version, Version}, Opts, false})
     end.
 
 -spec do_get_snapshot(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
@@ -314,11 +321,10 @@ get_snap(Version) ->
 get_all_snaps() ->
     ets:tab2list(?TABLE).
 
--spec update_cache(from() | undefined, state()) -> {noreply, state()}.
-update_cache(From, #state{waiters = Waiters} = State) ->
-    DispatchFun = fun dispatch_update/2,
-    NewWaiters = maybe_fetch({head, #'Head'{}}, From, DispatchFun, Waiters, undefined),
-    {noreply, restart_timer(State#state{waiters = NewWaiters})}.
+fetch_version(Reference, From, Opts, #state{waiters = Waiters} = State) ->
+    DispatchFun = fun dispatch_reply/2,
+    NewWaiters = maybe_fetch(Reference, From, DispatchFun, Waiters, Opts),
+    State#state{waiters = NewWaiters}.
 
 -spec maybe_fetch(dmt_client:ref(), from() | undefined, dispatch_fun(), waiters(), dmt_client:transport_opts()) ->
     waiters().
@@ -375,15 +381,13 @@ do_fetch({head, #'Head'{}}, Opts) ->
 do_fetch(Reference, Opts) ->
     dmt_client_backend:checkout(Reference, Opts).
 
--spec dispatch_update(from() | undefined, fetch_result()) -> ok.
-dispatch_update(undefined, _Result) ->
+-spec dispatch_reply(from() | undefined, fetch_result()) -> _.
+dispatch_reply(undefined, _Result) ->
     ok;
-dispatch_update(From, {ok, {version, Version}}) ->
-    _ = gen_server:reply(From, {ok, Version}),
-    ok;
-dispatch_update(From, Error) ->
-    _ = gen_server:reply(From, Error),
-    ok.
+dispatch_reply(From, {ok, {version, Version}}) ->
+    gen_server:reply(From, {ok, Version});
+dispatch_reply(From, Error) ->
+    gen_server:reply(From, Error).
 
 -spec build_snapshot(snap()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 build_snapshot(#snap{vsn = Version, tid = TID}) ->
