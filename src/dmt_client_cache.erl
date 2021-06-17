@@ -8,6 +8,8 @@
 
 -export([get_snapshot/2]).
 -export([get/3]).
+-export([get_by_type/3]).
+-export([fold/4]).
 -export([get_last_version/0]).
 -export([update/0]).
 
@@ -15,6 +17,8 @@
 %% Test-only helpers for white-box testing
 -export([get_snapshot/1]).
 -export([get/2]).
+-export([get_by_type/2]).
+-export([fold/3]).
 -endif.
 
 %% gen_server callbacks
@@ -104,6 +108,22 @@ get_snapshot(Version, Opts) ->
 get(Version, ObjectRef, Opts) ->
     case ensure_version(Version, Opts) of
         {ok, _Reference} -> do_get(Version, ObjectRef);
+        {error, _} = Error -> Error
+    end.
+
+-spec get_by_type(dmt_client:version(), dmt_client:object_type(), dmt_client:transport_opts()) ->
+    {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
+get_by_type(Version, ObjectType, Opts) ->
+    case ensure_version(Version, Opts) of
+        {ok, _Reference} -> do_get_by_type(Version, ObjectType);
+        {error, _} = Error -> Error
+    end.
+
+-spec fold(dmt_client:version(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
+    {ok, Acc} | {error, version_not_found | woody_error()}.
+fold(Version, Folder, Acc, Opts) ->
+    case ensure_version(Version, Opts) of
+        {ok, _Reference} -> do_fold(Version, Folder, Acc);
         {error, _} = Error -> Error
     end.
 
@@ -221,6 +241,34 @@ do_get(Version, ObjectRef) ->
         % table was deleted
         % DISCUSS: is it correct though? Wouldn't recuring back to original function be better?
         % This way, we can fetch wiped snapshot again only for this version
+        error:badarg ->
+            {error, version_not_found}
+    end.
+
+do_get_by_type(Version, ObjectType) ->
+    {ok, #snap{tid = TID}} = get_snap(Version),
+    MatchSpec = [
+        {{object, '_', {ObjectType, '$1'}}, [], ['$1']}
+    ],
+    try ets:select(TID, MatchSpec) of
+        Result ->
+            {ok, Result}
+    catch
+        %% DISCUSS: same as above for do_get
+        error:badarg ->
+            {error, version_not_found}
+    end.
+
+do_fold(Version, Folder, Acc) ->
+    {ok, #snap{tid = TID}} = get_snap(Version),
+    MappedFolder = fun({object, {Type, _Ref}, {Type, Object}}, AccIn) ->
+        Folder(Type, Object, AccIn)
+    end,
+    try ets:foldl(MappedFolder, Acc, TID) of
+        Result ->
+            {ok, Result}
+    catch
+        %% DISCUSS: same as above for do_get
         error:badarg ->
             {error, version_not_found}
     end.
@@ -468,6 +516,16 @@ get_snapshot(Version) ->
 get(Version, ObjectRef) ->
     get(Version, ObjectRef, undefined).
 
+-spec get_by_type(dmt_client:version(), dmt_client:object_type()) ->
+    {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
+get_by_type(Version, ObjectRef) ->
+    get_by_type(Version, ObjectRef, undefined).
+
+-spec fold(dmt_client:version(), dmt_client:object_folder(Acc), Acc) ->
+    {ok, Acc} | {error, version_not_found | woody_error()}.
+fold(Version, Folder, Acc) ->
+    fold(Version, Folder, Acc, undefined).
+
 % dirty hack for warn_missing_spec
 -spec test() -> any().
 
@@ -482,7 +540,10 @@ all_test_() ->
         end,
         [
             fun test_cleanup/0,
-            fun test_last_access/0
+            fun test_last_access/0,
+            fun test_get_object/0,
+            fun test_get_object_by_type/0,
+            fun test_fold/0
         ]}.
 
 set_cache_limits(Elements) ->
@@ -518,6 +579,120 @@ test_last_access() ->
         #snap{vsn = 3, _ = _},
         #snap{vsn = 4, _ = _}
     ] = get_all_snaps().
+
+-spec test_get_object() -> _.
+test_get_object() ->
+    set_cache_limits(1),
+    Version = 5,
+    Cat = {_, Ref, _} = fixture(category),
+    Domain = dmt_insert_many(
+        [{category, Cat}]
+    ),
+
+    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+
+    {ok, {category, Cat}} = get(Version, {category, Ref}, undefined).
+
+-spec test_get_object_by_type() -> _.
+test_get_object_by_type() ->
+    set_cache_limits(1),
+    Version = 6,
+    Cat1 = fixture(category),
+    Cat2 = fixture(category_2),
+    Cur = fixture(currency),
+
+    Domain = dmt_insert_many(
+        [
+            {category, Cat1},
+            {category, Cat2},
+            {currency, Cur}
+        ]
+    ),
+
+    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+
+    {ok, Objects} = get_by_type(Version, category, undefined),
+    [Cat1, Cat2] = lists:sort(Objects).
+
+-spec test_fold() -> _.
+test_fold() ->
+    set_cache_limits(1),
+    Version = 7,
+    Cat1 = fixture(category),
+    Cat2 = fixture(category_2),
+    Cur = fixture(currency),
+
+    Domain = dmt_insert_many(
+        [
+            {category, Cat1},
+            {category, Cat2},
+            {currency, Cur}
+        ]
+    ),
+
+    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+
+    {ok, OrdSet} = fold(
+        Version,
+        fun
+            (
+                category,
+                #'domain_CategoryObject'{
+                    ref = #'domain_CategoryRef'{id = ID}
+                },
+                Acc
+            ) ->
+                ordsets:add_element(ID, Acc);
+            (_Type, _Obj, Acc) ->
+                Acc
+        end,
+        ordsets:new()
+    ),
+
+    [1, 2] = ordsets:to_list(OrdSet).
+
+dmt_insert_many(Objects) ->
+    dmt_insert_many(Objects, dmt_domain:new()).
+
+dmt_insert_many(Objects, Domain) ->
+    lists:foldl(
+        fun(Object, DomainIn) ->
+            {ok, DomainOut} = dmt_domain:insert(Object, DomainIn),
+            DomainOut
+        end,
+        Domain,
+        Objects
+    ).
+
+fixture(ID) ->
+    maps:get(
+        ID,
+        #{
+            category => #'domain_CategoryObject'{
+                ref = #'domain_CategoryRef'{id = 1},
+                data = #'domain_Category'{
+                    name = <<"cat">>,
+                    description = <<"Sample category">>
+                }
+            },
+            category_2 => #'domain_CategoryObject'{
+                ref = #'domain_CategoryRef'{id = 2},
+                data = #'domain_Category'{
+                    name = <<"dog">>,
+                    description = <<"Sample category">>
+                }
+            },
+            currency => #'domain_CurrencyObject'{
+                ref = #'domain_CurrencyRef'{symbolic_code = <<"USD">>},
+                data = #'domain_Currency'{
+                    name = <<"dog">>,
+                    symbolic_code = <<"USD">>,
+                    numeric_code = 840,
+                    exponent = 2
+                }
+            }
+        }
+    ).
 
 % TEST
 -endif.

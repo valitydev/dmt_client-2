@@ -13,6 +13,12 @@
 -export([get/3]).
 -export([get_versioned/2]).
 -export([get_versioned/3]).
+-export([get_by_type/2]).
+-export([get_by_type/3]).
+-export([filter/2]).
+-export([filter/3]).
+-export([fold/3]).
+-export([fold/4]).
 -export([commit/2]).
 -export([commit/3]).
 -export([get_last_version/0]).
@@ -35,6 +41,9 @@
 -export_type([snapshot/0]).
 -export_type([commit/0]).
 -export_type([object_ref/0]).
+-export_type([object_type/0]).
+-export_type([object_filter/0]).
+-export_type([object_folder/1]).
 -export_type([domain_object/0]).
 -export_type([domain/0]).
 -export_type([history/0]).
@@ -48,6 +57,9 @@
 -type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
+-type object_type() :: atom().
+-type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
+-type object_folder(Acc) :: fun((object_type(), domain_object(), Acc) -> Acc).
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
 -type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
@@ -87,6 +99,38 @@ get_versioned(Reference, ObjectReference) ->
 get_versioned(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     #'VersionedObject'{version = Version, object = get(Reference, ObjectReference, Opts)}.
+
+-spec get_by_type(ref(), object_type()) -> [domain_object()] | no_return().
+get_by_type(Reference, ObjectType) ->
+    get_by_type(Reference, ObjectType, undefined).
+
+-spec get_by_type(ref(), object_type(), transport_opts()) -> [domain_object()] | no_return().
+get_by_type(Reference, ObjectType, Opts) ->
+    Version = ref_to_version(Reference),
+    unwrap(dmt_client_cache:get_by_type(Version, ObjectType, Opts)).
+
+-spec filter(ref(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
+filter(Reference, Filter) ->
+    filter(Reference, Filter, undefined).
+
+-spec filter(ref(), object_filter(), transport_opts()) -> [{object_type(), domain_object()}] | no_return().
+filter(Reference, Filter, Opts) ->
+    Folder = fun(Type, Object, Acc) ->
+        case Filter(Type, Object) of
+            true -> [{Type, Object} | Acc];
+            false -> Acc
+        end
+    end,
+    fold(Reference, Folder, [], Opts).
+
+-spec fold(ref(), object_folder(Acc), Acc) -> Acc | no_return().
+fold(Reference, Folder, Acc) ->
+    fold(Reference, Folder, Acc, undefined).
+
+-spec fold(ref(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
+fold(Reference, Folder, Acc, Opts) ->
+    Version = ref_to_version(Reference),
+    unwrap(dmt_client_cache:fold(Version, Folder, Acc, Opts)).
 
 -spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
