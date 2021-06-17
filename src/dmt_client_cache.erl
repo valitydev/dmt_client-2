@@ -622,15 +622,12 @@ test_get_object_by_type() ->
 test_fold() ->
     set_cache_limits(1),
     Version = 7,
-    Cat1 = fixture(category),
-    Cat2 = fixture(category_2),
-    Cur = fixture(currency),
 
     Domain = dmt_insert_many(
         [
-            {category, Cat1},
-            {category, Cat2},
-            {currency, Cur}
+            {category, fixture(category)},
+            {category, fixture(category_2)},
+            {currency, fixture(currency)}
         ]
     ),
 
