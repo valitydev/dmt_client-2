@@ -603,15 +603,8 @@ test_get_object_by_type() ->
     Version = 6,
     Cat1 = fixture(category),
     Cat2 = fixture(category_2),
-    Cur = fixture(currency),
 
-    Domain = dmt_insert_many(
-        [
-            {category, Cat1},
-            {category, Cat2},
-            {currency, Cur}
-        ]
-    ),
+    Domain = domain_with_all_fixtures(),
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
@@ -623,13 +616,7 @@ test_fold() ->
     set_cache_limits(1),
     Version = 7,
 
-    Domain = dmt_insert_many(
-        [
-            {category, fixture(category)},
-            {category, fixture(category_2)},
-            {currency, fixture(currency)}
-        ]
-    ),
+    Domain = domain_with_all_fixtures(),
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
@@ -651,6 +638,15 @@ test_fold() ->
     ),
 
     [1, 2] = ordsets:to_list(OrdSet).
+
+domain_with_all_fixtures() ->
+    dmt_insert_many(
+        [
+            {category, fixture(category)},
+            {category, fixture(category_2)},
+            {currency, fixture(currency)}
+        ]
+    ).
 
 dmt_insert_many(Objects) ->
     dmt_insert_many(Objects, dmt_domain:new()).
