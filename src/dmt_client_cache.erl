@@ -135,7 +135,7 @@ get_last_version() ->
 
 -spec update() -> {ok, dmt_client:ref()} | {error, woody_error()}.
 update() ->
-    call({fetch_version, {head, #'Head'{}}, undefined, true}).
+    call(update).
 
 %%% gen_server callbacks
 
@@ -145,23 +145,15 @@ init(_) ->
     {ok, #state{}, 0}.
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call({fetch_version, Reference, Opts, RestartTimer}, From, State) ->
-    {MustFetch, Version} =
-        case Reference of
-            {head, _} -> {true, undefined};
-            {version, V} -> {not ets:member(?TABLE, V), V}
-        end,
-
-    case MustFetch of
-        false ->
-            {reply, {ok, Version}, State};
+handle_call({fetch_version, Version, Opts}, From, State) ->
+    case ets:member(?TABLE, Version) of
         true ->
-            NewState = fetch_version(Reference, From, Opts, State),
-            case RestartTimer of
-                true -> {noreply, restart_timer(NewState)};
-                false -> {noreply, NewState}
-            end
+            {reply, {ok, Version}, State};
+        false ->
+            {noreply, fetch_by_reference({version, Version}, From, Opts, State)}
     end;
+handle_call(update, From, State) ->
+    {noreply, update(From, State)};
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
@@ -174,8 +166,7 @@ handle_cast(_Msg, State) ->
 
 -spec handle_info(term(), state()) -> {noreply, state()}.
 handle_info(timeout, State) ->
-    NewState = fetch_version({head, #'Head'{}}, undefined, undefined, State),
-    {noreply, restart_timer(NewState)};
+    {noreply, update(undefined, State)};
 handle_info(_Msg, State) ->
     {noreply, State}.
 
@@ -215,7 +206,7 @@ cast(Msg) ->
 ensure_version(Version, Opts) ->
     case ets:member(?TABLE, Version) of
         true -> {ok, Version};
-        false -> call({fetch_version, {version, Version}, Opts, false})
+        false -> call({fetch_version, Version, Opts})
     end.
 
 -spec do_get_snapshot(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
@@ -313,7 +304,10 @@ get_snap(Version) ->
 get_all_snaps() ->
     ets:tab2list(?TABLE).
 
-fetch_version(Reference, From, Opts, #state{waiters = Waiters} = State) ->
+update(From, State) ->
+    restart_timer(fetch_by_reference({head, #'Head'{}}, From, undefined, State)).
+
+fetch_by_reference(Reference, From, Opts, #state{waiters = Waiters} = State) ->
     DispatchFun = fun dispatch_reply/2,
     NewWaiters = maybe_fetch(Reference, From, DispatchFun, Waiters, Opts),
     State#state{waiters = NewWaiters}.
