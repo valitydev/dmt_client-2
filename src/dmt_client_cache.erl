@@ -422,14 +422,20 @@ do_fetch({head, #'Head'{}}, Opts) ->
     case latest_snapshot() of
         {ok, OldHead} ->
             Limit = genlib_app:env(dmt_client, cache_update_pull_limit, ?DEFAULT_LIMIT),
-            FreshHistory = dmt_client_backend:pull_range(OldHead#'Snapshot'.version, Limit, Opts),
-            {ok, Head} = dmt_history:head(FreshHistory, OldHead),
-            Head;
+            update_head(OldHead, Limit, Opts);
         {error, version_not_found} ->
             dmt_client_backend:checkout({head, #'Head'{}}, Opts)
     end;
 do_fetch(Reference, Opts) ->
     dmt_client_backend:checkout(Reference, Opts).
+
+update_head(Head, PullLimit, Opts) ->
+    FreshHistory = dmt_client_backend:pull_range(Head#'Snapshot'.version, PullLimit, Opts),
+    {ok, NewHead} = dmt_history:head(FreshHistory, Head),
+    case NewHead == Head of
+        true -> NewHead;
+        false -> update_head(NewHead, PullLimit, Opts)
+    end.
 
 -spec dispatch_reply(from() | undefined, fetch_result()) -> _.
 dispatch_reply(undefined, _Result) ->
