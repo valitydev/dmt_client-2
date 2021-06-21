@@ -13,14 +13,6 @@
 -export([get_last_version/0]).
 -export([update/0]).
 
--ifdef(TEST).
-%% Test-only helpers for white-box testing
--export([get_snapshot/1]).
--export([get/2]).
--export([get_by_type/2]).
--export([fold/3]).
--endif.
-
 %% gen_server callbacks
 
 -export([init/1]).
@@ -511,25 +503,6 @@ timestamp() ->
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
--spec get_snapshot(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
-get_snapshot(Version) ->
-    get_snapshot(Version, undefined).
-
--spec get(dmt_client:version(), dmt_client:object_ref()) ->
-    {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
-get(Version, ObjectRef) ->
-    get(Version, ObjectRef, undefined).
-
--spec get_by_type(dmt_client:version(), dmt_client:object_type()) ->
-    {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
-get_by_type(Version, ObjectRef) ->
-    get_by_type(Version, ObjectRef, undefined).
-
--spec fold(dmt_client:version(), dmt_client:object_folder(Acc), Acc) ->
-    {ok, Acc} | {error, version_not_found | woody_error()}.
-fold(Version, Folder, Acc) ->
-    fold(Version, Folder, Acc, undefined).
-
 % dirty hack for warn_missing_spec
 -spec test() -> any().
 
@@ -576,7 +549,7 @@ test_last_access() ->
     ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
     ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
     Ref = {category, #'domain_CategoryRef'{id = 1}},
-    {error, object_not_found} = get(3, Ref),
+    {error, object_not_found} = get(3, Ref, undefined),
     ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
     [
         #snap{vsn = 1, _ = _},
@@ -634,7 +607,8 @@ test_fold() ->
             (_Type, _Obj, Acc) ->
                 Acc
         end,
-        ordsets:new()
+        ordsets:new(),
+        undefined
     ),
 
     [1, 2] = ordsets:to_list(OrdSet).

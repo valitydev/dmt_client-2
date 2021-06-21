@@ -115,18 +115,18 @@ pull_range(_Version, _Limit, _Opts) ->
 
 -spec get_snapshot_success(config()) -> any().
 get_snapshot_success(_C) ->
-    {ok, #'Snapshot'{}} = dmt_client_cache:get_snapshot(?existing_version).
+    {ok, #'Snapshot'{}} = dmt_client_cache:get_snapshot(?existing_version, undefined).
 
 -spec snapshot_not_found(config()) -> any().
 snapshot_not_found(_C) ->
-    {error, version_not_found} = dmt_client_cache:get_snapshot(?notfound_version).
+    {error, version_not_found} = dmt_client_cache:get_snapshot(?notfound_version, undefined).
 
 -spec woody_error(config()) -> any().
 woody_error(_C) ->
-    {error, {woody_error, _}} = dmt_client_cache:get_snapshot(?unavailable_version).
+    {error, {woody_error, _}} = dmt_client_cache:get_snapshot(?unavailable_version, undefined).
 
 -spec object_not_found(config()) -> any().
 object_not_found(_C) ->
     Ref = {category, #'domain_CategoryRef'{id = 1}},
-    {error, version_not_found} = dmt_client_cache:get(?notfound_version, Ref),
-    {error, object_not_found} = dmt_client_cache:get(?existing_version, Ref).
+    {error, version_not_found} = dmt_client_cache:get(?notfound_version, Ref, undefined),
+    {error, object_not_found} = dmt_client_cache:get(?existing_version, Ref, undefined).
