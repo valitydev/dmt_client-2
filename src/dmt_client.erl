@@ -41,6 +41,7 @@
 -export([stop/1]).
 
 -export_type([ref/0]).
+-export_type([vsn/0]).
 -export_type([version/0]).
 -export_type([limit/0]).
 -export_type([snapshot/0]).
@@ -57,8 +58,8 @@
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
 -type ref() :: dmsl_domain_config_thrift:'Reference'().
--type version() :: dmsl_domain_config_thrift:'Version'().
--type ref_arg() :: ref() | version() | head.
+-type vsn() :: dmsl_domain_config_thrift:'Version'().
+-type version() :: vsn() | latest.
 -type limit() :: dmsl_domain_config_thrift:'Limit'().
 -type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
 -type commit() :: dmsl_domain_config_thrift:'Commit'().
@@ -74,11 +75,11 @@
 
 %%% API
 
--spec get_snapshot(ref_arg()) -> snapshot() | no_return().
+-spec get_snapshot(version()) -> snapshot() | no_return().
 get_snapshot(Reference) ->
     get_snapshot(Reference, undefined).
 
--spec get_snapshot(ref_arg(), transport_opts()) -> snapshot() | no_return().
+-spec get_snapshot(version(), transport_opts()) -> snapshot() | no_return().
 get_snapshot(Reference, Opts) ->
     Version = ref_to_version(Reference),
     case dmt_client_cache:get_snapshot(Version, Opts) of
@@ -90,52 +91,52 @@ get_snapshot(Reference, Opts) ->
 
 -spec get(object_ref()) -> domain_object() | no_return().
 get(ObjectReference) ->
-    get(head, ObjectReference).
+    get(latest, ObjectReference).
 
--spec get(ref_arg(), object_ref()) -> domain_object() | no_return().
+-spec get(version(), object_ref()) -> domain_object() | no_return().
 get(Reference, ObjectReference) ->
     get(Reference, ObjectReference, undefined).
 
--spec get(ref_arg(), object_ref(), transport_opts()) -> domain_object() | no_return().
+-spec get(version(), object_ref(), transport_opts()) -> domain_object() | no_return().
 get(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:get(Version, ObjectReference, Opts)).
 
 -spec get_versioned(object_ref()) -> versioned_object() | no_return().
 get_versioned(ObjectReference) ->
-    get_versioned(head, ObjectReference).
+    get_versioned(latest, ObjectReference).
 
--spec get_versioned(ref_arg(), object_ref()) -> versioned_object() | no_return().
+-spec get_versioned(version(), object_ref()) -> versioned_object() | no_return().
 get_versioned(Reference, ObjectReference) ->
     get_versioned(Reference, ObjectReference, undefined).
 
--spec get_versioned(ref_arg(), object_ref(), transport_opts()) -> versioned_object() | no_return().
+-spec get_versioned(version(), object_ref(), transport_opts()) -> versioned_object() | no_return().
 get_versioned(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     #'VersionedObject'{version = Version, object = get(Reference, ObjectReference, Opts)}.
 
 -spec get_by_type(object_type()) -> [domain_object()] | no_return().
 get_by_type(ObjectType) ->
-    get_by_type(head, ObjectType).
+    get_by_type(latest, ObjectType).
 
--spec get_by_type(ref_arg(), object_type()) -> [domain_object()] | no_return().
+-spec get_by_type(version(), object_type()) -> [domain_object()] | no_return().
 get_by_type(Reference, ObjectType) ->
     get_by_type(Reference, ObjectType, undefined).
 
--spec get_by_type(ref_arg(), object_type(), transport_opts()) -> [domain_object()] | no_return().
+-spec get_by_type(version(), object_type(), transport_opts()) -> [domain_object()] | no_return().
 get_by_type(Reference, ObjectType, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:get_by_type(Version, ObjectType, Opts)).
 
 -spec filter(object_filter()) -> [{object_type(), domain_object()}] | no_return().
 filter(Filter) ->
-    filter(head, Filter).
+    filter(latest, Filter).
 
--spec filter(ref_arg(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
+-spec filter(version(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
 filter(Reference, Filter) ->
     filter(Reference, Filter, undefined).
 
--spec filter(ref_arg(), object_filter(), transport_opts()) -> [{object_type(), domain_object()}] | no_return().
+-spec filter(version(), object_filter(), transport_opts()) -> [{object_type(), domain_object()}] | no_return().
 filter(Reference, Filter, Opts) ->
     Folder = fun(Type, Object, Acc) ->
         case Filter(Type, Object) of
@@ -147,13 +148,13 @@ filter(Reference, Filter, Opts) ->
 
 -spec fold(object_folder(Acc), Acc) -> Acc | no_return().
 fold(Folder, Acc) ->
-    fold(head, Folder, Acc).
+    fold(latest, Folder, Acc).
 
--spec fold(ref_arg(), object_folder(Acc), Acc) -> Acc | no_return().
+-spec fold(version(), object_folder(Acc), Acc) -> Acc | no_return().
 fold(Reference, Folder, Acc) ->
     fold(Reference, Folder, Acc, undefined).
 
--spec fold(ref_arg(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
+-spec fold(version(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
 fold(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:fold(Version, Folder, Acc, Opts)).
@@ -214,12 +215,8 @@ unwrap({error, {woody_error, _} = Error}) -> erlang:error(Error);
 %% DISCUSS: shouldn't version_not_found be handled some other way?
 unwrap({error, _}) -> erlang:throw(#'ObjectNotFound'{}).
 
--spec ref_to_version(ref()) -> version().
+-spec ref_to_version(version()) -> vsn().
 ref_to_version(Version) when is_integer(Version) ->
     Version;
-ref_to_version(head) ->
-    dmt_client_cache:get_last_version();
-ref_to_version({version, Version}) ->
-    Version;
-ref_to_version({head, #'Head'{}}) ->
+ref_to_version(latest) ->
     dmt_client_cache:get_last_version().

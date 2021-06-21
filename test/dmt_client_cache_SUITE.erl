@@ -83,8 +83,7 @@ end_per_suite(C) ->
 
 %%% Dummy API
 
--spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
-    dmt_client:version() | no_return().
+-spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:transport_opts()) -> dmt_client:vsn() | no_return().
 commit(Version, _Commit, _Opts) ->
     Version.
 
@@ -105,7 +104,7 @@ checkout({head, #'Head'{}}, _Opts) ->
 checkout_object(_Reference, _ObjectReference, _Opts) ->
     erlang:throw(#'ObjectNotFound'{}).
 
--spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
+-spec pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
 pull_range(_Version, _Limit, _Opts) ->
     timer:sleep(5000),

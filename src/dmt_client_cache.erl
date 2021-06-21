@@ -51,7 +51,7 @@
 -type timestamp() :: integer().
 
 -record(snap, {
-    vsn :: dmt_client:version(),
+    vsn :: dmt_client:vsn(),
     tid :: ets:tid(),
     last_access :: timestamp()
 }).
@@ -85,7 +85,7 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec get_snapshot(dmt_client:version(), dmt_client:transport_opts()) ->
+-spec get_snapshot(dmt_client:vsn(), dmt_client:transport_opts()) ->
     {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
 get_snapshot(Version, Opts) ->
     case ensure_version(Version, Opts) of
@@ -95,7 +95,7 @@ get_snapshot(Version, Opts) ->
             Error
     end.
 
--spec get(dmt_client:version(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
+-spec get(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
 get(Version, ObjectRef, Opts) ->
     case ensure_version(Version, Opts) of
@@ -103,7 +103,7 @@ get(Version, ObjectRef, Opts) ->
         {error, _} = Error -> Error
     end.
 
--spec get_by_type(dmt_client:version(), dmt_client:object_type(), dmt_client:transport_opts()) ->
+-spec get_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:transport_opts()) ->
     {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
 get_by_type(Version, ObjectType, Opts) ->
     case ensure_version(Version, Opts) of
@@ -111,7 +111,7 @@ get_by_type(Version, ObjectType, Opts) ->
         {error, _} = Error -> Error
     end.
 
--spec fold(dmt_client:version(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
+-spec fold(dmt_client:vsn(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
     {ok, Acc} | {error, version_not_found | woody_error()}.
 fold(Version, Folder, Acc, Opts) ->
     case ensure_version(Version, Opts) of
@@ -119,7 +119,7 @@ fold(Version, Folder, Acc, Opts) ->
         {error, _} = Error -> Error
     end.
 
--spec get_last_version() -> dmt_client:version() | no_return().
+-spec get_last_version() -> dmt_client:vsn() | no_return().
 get_last_version() ->
     case do_get_last_version() of
         {ok, Version} ->
@@ -209,7 +209,7 @@ ensure_version(Version, Opts) ->
         false -> call({fetch_version, Version, Opts})
     end.
 
--spec do_get_snapshot(dmt_client:version()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
+-spec do_get_snapshot(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 do_get_snapshot(Version) ->
     case get_snap(Version) of
         {ok, Snap} ->
@@ -218,7 +218,7 @@ do_get_snapshot(Version) ->
             Error
     end.
 
--spec do_get(dmt_client:version(), dmt_client:object_ref()) ->
+-spec do_get(dmt_client:vsn(), dmt_client:object_ref()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
 do_get(Version, ObjectRef) ->
     {ok, #snap{tid = TID}} = get_snap(Version),
@@ -290,7 +290,7 @@ put_domain_to_table(TID, Domain) ->
         Domain
     ).
 
--spec get_snap(dmt_client:version()) -> {ok, snap()} | {error, version_not_found}.
+-spec get_snap(dmt_client:vsn()) -> {ok, snap()} | {error, version_not_found}.
 get_snap(Version) ->
     case ets:lookup(?TABLE, Version) of
         [Snap] ->
@@ -402,7 +402,7 @@ latest_snapshot() ->
             Error
     end.
 
--spec do_get_last_version() -> {ok, dmt_client:version()} | {error, version_not_found}.
+-spec do_get_last_version() -> {ok, dmt_client:vsn()} | {error, version_not_found}.
 do_get_last_version() ->
     case ets:last(?TABLE) of
         '$end_of_table' ->
@@ -430,7 +430,7 @@ cleanup() ->
     {ok, HeadVersion} = do_get_last_version(),
     cleanup(Sorted, HeadVersion).
 
--spec cleanup([snap()], dmt_client:version()) -> ok.
+-spec cleanup([snap()], dmt_client:vsn()) -> ok.
 cleanup([], _HeadVersion) ->
     ok;
 cleanup(Snaps, HeadVersion) ->
@@ -469,7 +469,7 @@ ets_memory(TID) ->
     Info = ets:info(TID),
     proplists:get_value(memory, Info).
 
--spec remove_earliest([snap()], dmt_client:version()) -> [snap()].
+-spec remove_earliest([snap()], dmt_client:vsn()) -> [snap()].
 remove_earliest([#snap{vsn = HeadVersion} | Tail], HeadVersion) ->
     Tail;
 remove_earliest([Snap | Tail], _HeadVersion) ->
@@ -482,7 +482,7 @@ remove_snap(#snap{tid = TID, vsn = Version}) ->
     true = ets:delete(TID),
     ok.
 
--spec update_last_access(dmt_client:version()) -> boolean().
+-spec update_last_access(dmt_client:vsn()) -> boolean().
 update_last_access(Version) ->
     ets:update_element(?TABLE, Version, {#snap.last_access, timestamp()}).
 
