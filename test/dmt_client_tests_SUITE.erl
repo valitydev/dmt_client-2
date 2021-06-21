@@ -62,7 +62,8 @@ poll(_C) ->
     true = Version1 < Version2,
     _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:get_snapshot(latest),
-    #'VersionedObject'{object = Object} = dmt_client:get(latest, Ref).
+    Object = dmt_client:get(latest, Ref),
+    #'VersionedObject'{version = Version2, object = Object} = dmt_client:get_versioned(latest, Ref).
 
 fixture_domain_object(Ref, Data) ->
     {category, #'domain_CategoryObject'{
