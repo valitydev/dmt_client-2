@@ -133,7 +133,7 @@ get_last_version() ->
             end
     end.
 
--spec update() -> {ok, dmt_client:ref()} | {error, woody_error()}.
+-spec update() -> {ok, dmt_client:vsn()} | {error, woody_error()}.
 update() ->
     call(update).
 
@@ -161,6 +161,9 @@ handle_call(_Msg, _From, State) ->
 handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
     _ = [DispatchFun(From, Result) || {From, DispatchFun} <- maps:get(Reference, Waiters, [])],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
+handle_cast(cleanup, State) ->
+    cleanup(),
+    {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -277,7 +280,8 @@ put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
                 last_access = timestamp()
             },
             true = ets:insert(?TABLE, Snap),
-            cleanup()
+            cast(cleanup),
+            ok
     end.
 
 -spec put_domain_to_table(ets:tid(), dmt_client:domain()) -> true.
@@ -333,7 +337,7 @@ schedule_fetch(Reference, Opts) ->
                 case fetch(Reference, Opts) of
                     {ok, Snapshot} ->
                         put_snapshot(Snapshot),
-                        {ok, Reference};
+                        {ok, Snapshot#'Snapshot'.version};
                     {error, _} = Error ->
                         Error
                 end,
@@ -370,7 +374,7 @@ do_fetch(Reference, Opts) ->
 -spec dispatch_reply(from() | undefined, fetch_result()) -> _.
 dispatch_reply(undefined, _Result) ->
     ok;
-dispatch_reply(From, {ok, {version, Version}}) ->
+dispatch_reply(From, {ok, Version}) ->
     gen_server:reply(From, {ok, Version});
 dispatch_reply(From, Error) ->
     gen_server:reply(From, Error).
@@ -530,6 +534,7 @@ test_cleanup() ->
     ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
     ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
     ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    cleanup(),
     [
         #snap{vsn = 1, _ = _},
         #snap{vsn = 4, _ = _}
@@ -545,6 +550,7 @@ test_last_access() ->
     Ref = {category, #'domain_CategoryRef'{id = 1}},
     {error, object_not_found} = get(3, Ref, undefined),
     ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    cleanup(),
     [
         #snap{vsn = 1, _ = _},
         #snap{vsn = 3, _ = _},
