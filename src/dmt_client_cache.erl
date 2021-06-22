@@ -42,7 +42,7 @@
 ]).
 
 -define(snapshot_table_opts, [
-    set,
+    ordered_set,
     protected,
     {read_concurrency, true},
     {write_concurrency, false},
