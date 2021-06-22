@@ -484,7 +484,7 @@ restart_update_timer(State = #state{update_timer = TimerRef}) ->
 -spec restart_cleanup_timer(state()) -> state().
 restart_cleanup_timer(State = #state{cleanup_timer = TimerRef}) ->
     cancel_timer(TimerRef),
-    Interval = genlib_app:env(dmt_client, cache_update_interval, ?DEFAULT_CLEANUP_INTERVAL),
+    Interval = genlib_app:env(dmt_client, cache_cleanup_interval, ?DEFAULT_CLEANUP_INTERVAL),
     State#state{cleanup_timer = erlang:send_after(Interval, self(), {cleanup_timer, timeout})}.
 
 cancel_timer(undefined) ->
