@@ -526,7 +526,11 @@ cleanup(Snaps, HeadVersion) ->
     case Elements > MaxElements orelse (Elements > 1 andalso Memory > MaxMemory) of
         true ->
             Tail = remove_earliest(Snaps, HeadVersion),
-            cleanup(Tail, HeadVersion);
+            %% It's possible that all snaps are locked by users: try later
+            case Snaps == Tail of
+                true -> ok;
+                false -> cleanup(Tail, HeadVersion)
+            end;
         false ->
             ok
     end.
@@ -554,6 +558,8 @@ ets_memory(TID) ->
     proplists:get_value(memory, Info).
 
 -spec remove_earliest([snap()], dmt_client:vsn()) -> [snap()].
+remove_earliest([], _HeadVersion) ->
+    [];
 remove_earliest([#snap{vsn = HeadVersion} | Tail], HeadVersion) ->
     Tail;
 remove_earliest([Snap = #snap{vsn = Version, cached_at = StoredAt} | Tail], HeadVersion) ->
