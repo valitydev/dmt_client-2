@@ -154,7 +154,6 @@ get_last_version() ->
 update() ->
     case call(update) of
         {fetched, Version} ->
-            cast({unlock, Version, self()}),
             {ok, Version};
         AsIs ->
             AsIs
