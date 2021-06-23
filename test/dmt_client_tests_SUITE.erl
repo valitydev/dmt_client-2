@@ -56,14 +56,14 @@ end_per_suite(C) ->
 poll(_C) ->
     Object = fixture_domain_object(1, <<"InsertFixture">>),
     Ref = fixture_object_ref(1),
-    #'ObjectNotFound'{} = (catch dmt_client:get(latest, Ref)),
-    #'Snapshot'{version = Version1} = dmt_client:get_snapshot(latest),
+    #'ObjectNotFound'{} = (catch dmt_client:checkout_object(latest, Ref)),
+    #'Snapshot'{version = Version1} = dmt_client:checkout(latest),
     Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, undefined),
     true = Version1 < Version2,
     _ = dmt_client_cache:update(),
-    #'Snapshot'{version = Version2} = dmt_client:get_snapshot(latest),
-    Object = dmt_client:get(latest, Ref),
-    #'VersionedObject'{version = Version2, object = Object} = dmt_client:get_versioned(latest, Ref),
+    #'Snapshot'{version = Version2} = dmt_client:checkout(latest),
+    Object = dmt_client:checkout_object(latest, Ref),
+    #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref),
     timer:sleep(5000),
     erlang:display(ets:tab2list(dmt_client_cache_users)).
 

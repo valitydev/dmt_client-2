@@ -6,10 +6,10 @@
 
 -export([start_link/0]).
 
--export([get_snapshot/2]).
--export([get/3]).
--export([get_by_type/3]).
--export([fold/4]).
+-export([checkout/2]).
+-export([checkout_object/3]).
+-export([checkout_objects_by_type/3]).
+-export([checkout_fold_objects/4]).
 -export([get_last_version/0]).
 -export([update/0]).
 
@@ -106,25 +106,25 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec get_snapshot(dmt_client:vsn(), dmt_client:transport_opts()) ->
+-spec checkout(dmt_client:vsn(), dmt_client:transport_opts()) ->
     {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
-get_snapshot(Version, Opts) ->
-    with_version(Version, Opts, fun() -> do_get_snapshot(Version) end).
+checkout(Version, Opts) ->
+    with_version(Version, Opts, fun() -> do_checkout(Version) end).
 
--spec get(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
+-spec checkout_object(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
-get(Version, ObjectRef, Opts) ->
-    with_version(Version, Opts, fun() -> do_get(Version, ObjectRef) end).
+checkout_object(Version, ObjectRef, Opts) ->
+    with_version(Version, Opts, fun() -> do_checkout_object(Version, ObjectRef) end).
 
--spec get_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:transport_opts()) ->
+-spec checkout_objects_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:transport_opts()) ->
     {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
-get_by_type(Version, ObjectType, Opts) ->
-    with_version(Version, Opts, fun() -> do_get_by_type(Version, ObjectType) end).
+checkout_objects_by_type(Version, ObjectType, Opts) ->
+    with_version(Version, Opts, fun() -> do_checkout_objects_by_type(Version, ObjectType) end).
 
--spec fold(dmt_client:vsn(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
+-spec checkout_fold_objects(dmt_client:vsn(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
     {ok, Acc} | {error, version_not_found | woody_error()}.
-fold(Version, Folder, Acc, Opts) ->
-    with_version(Version, Opts, fun() -> do_fold(Version, Folder, Acc) end).
+checkout_fold_objects(Version, Folder, Acc, Opts) ->
+    with_version(Version, Opts, fun() -> do_checkout_fold_objects(Version, Folder, Acc) end).
 
 -spec get_last_version() -> dmt_client:vsn() | no_return().
 get_last_version() ->
@@ -258,8 +258,8 @@ with_version(Version, Opts, Fun) ->
             Error
     end.
 
--spec do_get_snapshot(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
-do_get_snapshot(Version) ->
+-spec do_checkout(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
+do_checkout(Version) ->
     case get_snap(Version) of
         {ok, Snap} ->
             build_snapshot(Snap);
@@ -267,9 +267,9 @@ do_get_snapshot(Version) ->
             Error
     end.
 
--spec do_get(dmt_client:vsn(), dmt_client:object_ref()) ->
+-spec do_checkout_object(dmt_client:vsn(), dmt_client:object_ref()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
-do_get(Version, ObjectRef) ->
+do_checkout_object(Version, ObjectRef) ->
     {ok, #snap{tid = TID}} = get_snap(Version),
     try ets:lookup(TID, ObjectRef) of
         [#object{obj = Object}] ->
@@ -284,7 +284,7 @@ do_get(Version, ObjectRef) ->
             {error, version_not_found}
     end.
 
-do_get_by_type(Version, ObjectType) ->
+do_checkout_objects_by_type(Version, ObjectType) ->
     {ok, #snap{tid = TID}} = get_snap(Version),
     MatchSpec = [
         {#object{ref = '_', obj = {ObjectType, '$1'}}, [], ['$1']}
@@ -293,12 +293,12 @@ do_get_by_type(Version, ObjectType) ->
         Result ->
             {ok, Result}
     catch
-        %% DISCUSS: same as above for do_get
+        %% DISCUSS: same as above for do_checkout_object
         error:badarg ->
             {error, version_not_found}
     end.
 
-do_fold(Version, Folder, Acc) ->
+do_checkout_fold_objects(Version, Folder, Acc) ->
     {ok, #snap{tid = TID}} = get_snap(Version),
     MappedFolder = fun({object, {Type, _Ref}, {Type, Object}}, AccIn) ->
         Folder(Type, Object, AccIn)
@@ -307,7 +307,7 @@ do_fold(Version, Folder, Acc) ->
         Result ->
             {ok, Result}
     catch
-        %% DISCUSS: same as above for do_get
+        %% DISCUSS: same as above for do_checkout_object
         error:badarg ->
             {error, version_not_found}
     end.
@@ -460,7 +460,7 @@ build_snapshot(#snap{vsn = Version, tid = TID}) ->
 latest_snapshot() ->
     case do_get_last_version() of
         {ok, Version} ->
-            do_get_snapshot(Version);
+            do_checkout(Version);
         {error, version_not_found} = Error ->
             Error
     end.
@@ -658,7 +658,7 @@ test_last_access() ->
     ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
     ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
     Ref = {category, #'domain_CategoryRef'{id = 1}},
-    {error, object_not_found} = get(3, Ref, undefined),
+    {error, object_not_found} = checkout_object(3, Ref, undefined),
     ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
     cleanup(),
     [
@@ -678,7 +678,7 @@ test_get_object() ->
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
-    {ok, {category, Cat}} = get(Version, {category, Ref}, undefined).
+    {ok, {category, Cat}} = checkout_object(Version, {category, Ref}, undefined).
 
 -spec test_get_object_by_type() -> _.
 test_get_object_by_type() ->
@@ -691,7 +691,7 @@ test_get_object_by_type() ->
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
-    {ok, Objects} = get_by_type(Version, category, undefined),
+    {ok, Objects} = checkout_objects_by_type(Version, category, undefined),
     [Cat1, Cat2] = lists:sort(Objects).
 
 -spec test_fold() -> _.
@@ -703,7 +703,7 @@ test_fold() ->
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
-    {ok, OrdSet} = fold(
+    {ok, OrdSet} = checkout_fold_objects(
         Version,
         fun
             (

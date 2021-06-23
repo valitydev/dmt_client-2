@@ -7,23 +7,23 @@
 -behaviour(application).
 
 %% API
--export([get_snapshot/1]).
--export([get_snapshot/2]).
--export([get/1]).
--export([get/2]).
--export([get/3]).
--export([get_versioned/1]).
--export([get_versioned/2]).
--export([get_versioned/3]).
--export([get_by_type/1]).
--export([get_by_type/2]).
--export([get_by_type/3]).
--export([filter/1]).
--export([filter/2]).
--export([filter/3]).
--export([fold/2]).
--export([fold/3]).
--export([fold/4]).
+-export([checkout/1]).
+-export([checkout/2]).
+-export([checkout_object/1]).
+-export([checkout_object/2]).
+-export([checkout_object/3]).
+-export([checkout_versioned_object/1]).
+-export([checkout_versioned_object/2]).
+-export([checkout_versioned_object/3]).
+-export([checkout_objects_by_type/1]).
+-export([checkout_objects_by_type/2]).
+-export([checkout_objects_by_type/3]).
+-export([checkout_filter_objects/1]).
+-export([checkout_filter_objects/2]).
+-export([checkout_filter_objects/3]).
+-export([checkout_fold_objects/2]).
+-export([checkout_fold_objects/3]).
+-export([checkout_fold_objects/4]).
 -export([commit/2]).
 -export([commit/3]).
 -export([get_last_version/0]).
@@ -75,89 +75,90 @@
 
 %%% API
 
--spec get_snapshot(version()) -> snapshot() | no_return().
-get_snapshot(Reference) ->
-    get_snapshot(Reference, undefined).
+-spec checkout(version()) -> snapshot() | no_return().
+checkout(Reference) ->
+    checkout(Reference, undefined).
 
--spec get_snapshot(version(), transport_opts()) -> snapshot() | no_return().
-get_snapshot(Reference, Opts) ->
+-spec checkout(version(), transport_opts()) -> snapshot() | no_return().
+checkout(Reference, Opts) ->
     Version = ref_to_version(Reference),
-    case dmt_client_cache:get_snapshot(Version, Opts) of
+    case dmt_client_cache:checkout(Version, Opts) of
         {ok, Snapshot} ->
             Snapshot;
         {error, Error} ->
             erlang:error(Error)
     end.
 
--spec get(object_ref()) -> domain_object() | no_return().
-get(ObjectReference) ->
-    get(latest, ObjectReference).
+-spec checkout_object(object_ref()) -> domain_object() | no_return().
+checkout_object(ObjectReference) ->
+    checkout_object(latest, ObjectReference).
 
--spec get(version(), object_ref()) -> domain_object() | no_return().
-get(Reference, ObjectReference) ->
-    get(Reference, ObjectReference, undefined).
+-spec checkout_object(version(), object_ref()) -> domain_object() | no_return().
+checkout_object(Reference, ObjectReference) ->
+    checkout_object(Reference, ObjectReference, undefined).
 
--spec get(version(), object_ref(), transport_opts()) -> domain_object() | no_return().
-get(Reference, ObjectReference, Opts) ->
+-spec checkout_object(version(), object_ref(), transport_opts()) -> domain_object() | no_return().
+checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:get(Version, ObjectReference, Opts)).
+    unwrap(dmt_client_cache:checkout_object(Version, ObjectReference, Opts)).
 
--spec get_versioned(object_ref()) -> versioned_object() | no_return().
-get_versioned(ObjectReference) ->
-    get_versioned(latest, ObjectReference).
+-spec checkout_versioned_object(object_ref()) -> versioned_object() | no_return().
+checkout_versioned_object(ObjectReference) ->
+    checkout_versioned_object(latest, ObjectReference).
 
--spec get_versioned(version(), object_ref()) -> versioned_object() | no_return().
-get_versioned(Reference, ObjectReference) ->
-    get_versioned(Reference, ObjectReference, undefined).
+-spec checkout_versioned_object(version(), object_ref()) -> versioned_object() | no_return().
+checkout_versioned_object(Reference, ObjectReference) ->
+    checkout_versioned_object(Reference, ObjectReference, undefined).
 
--spec get_versioned(version(), object_ref(), transport_opts()) -> versioned_object() | no_return().
-get_versioned(Reference, ObjectReference, Opts) ->
+-spec checkout_versioned_object(version(), object_ref(), transport_opts()) -> versioned_object() | no_return().
+checkout_versioned_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    #'VersionedObject'{version = Version, object = get(Reference, ObjectReference, Opts)}.
+    #'VersionedObject'{version = Version, object = checkout_object(Reference, ObjectReference, Opts)}.
 
--spec get_by_type(object_type()) -> [domain_object()] | no_return().
-get_by_type(ObjectType) ->
-    get_by_type(latest, ObjectType).
+-spec checkout_objects_by_type(object_type()) -> [domain_object()] | no_return().
+checkout_objects_by_type(ObjectType) ->
+    checkout_objects_by_type(latest, ObjectType).
 
--spec get_by_type(version(), object_type()) -> [domain_object()] | no_return().
-get_by_type(Reference, ObjectType) ->
-    get_by_type(Reference, ObjectType, undefined).
+-spec checkout_objects_by_type(version(), object_type()) -> [domain_object()] | no_return().
+checkout_objects_by_type(Reference, ObjectType) ->
+    checkout_objects_by_type(Reference, ObjectType, undefined).
 
--spec get_by_type(version(), object_type(), transport_opts()) -> [domain_object()] | no_return().
-get_by_type(Reference, ObjectType, Opts) ->
+-spec checkout_objects_by_type(version(), object_type(), transport_opts()) -> [domain_object()] | no_return().
+checkout_objects_by_type(Reference, ObjectType, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:get_by_type(Version, ObjectType, Opts)).
+    unwrap(dmt_client_cache:checkout_objects_by_type(Version, ObjectType, Opts)).
 
--spec filter(object_filter()) -> [{object_type(), domain_object()}] | no_return().
-filter(Filter) ->
-    filter(latest, Filter).
+-spec checkout_filter_objects(object_filter()) -> [{object_type(), domain_object()}] | no_return().
+checkout_filter_objects(Filter) ->
+    checkout_filter_objects(latest, Filter).
 
--spec filter(version(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
-filter(Reference, Filter) ->
-    filter(Reference, Filter, undefined).
+-spec checkout_filter_objects(version(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
+checkout_filter_objects(Reference, Filter) ->
+    checkout_filter_objects(Reference, Filter, undefined).
 
--spec filter(version(), object_filter(), transport_opts()) -> [{object_type(), domain_object()}] | no_return().
-filter(Reference, Filter, Opts) ->
+-spec checkout_filter_objects(version(), object_filter(), transport_opts()) ->
+    [{object_type(), domain_object()}] | no_return().
+checkout_filter_objects(Reference, Filter, Opts) ->
     Folder = fun(Type, Object, Acc) ->
         case Filter(Type, Object) of
             true -> [{Type, Object} | Acc];
             false -> Acc
         end
     end,
-    fold(Reference, Folder, [], Opts).
+    checkout_fold_objects(Reference, Folder, [], Opts).
 
--spec fold(object_folder(Acc), Acc) -> Acc | no_return().
-fold(Folder, Acc) ->
-    fold(latest, Folder, Acc).
+-spec checkout_fold_objects(object_folder(Acc), Acc) -> Acc | no_return().
+checkout_fold_objects(Folder, Acc) ->
+    checkout_fold_objects(latest, Folder, Acc).
 
--spec fold(version(), object_folder(Acc), Acc) -> Acc | no_return().
-fold(Reference, Folder, Acc) ->
-    fold(Reference, Folder, Acc, undefined).
+-spec checkout_fold_objects(version(), object_folder(Acc), Acc) -> Acc | no_return().
+checkout_fold_objects(Reference, Folder, Acc) ->
+    checkout_fold_objects(Reference, Folder, Acc, undefined).
 
--spec fold(version(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
-fold(Reference, Folder, Acc, Opts) ->
+-spec checkout_fold_objects(version(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
+checkout_fold_objects(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:fold(Version, Folder, Acc, Opts)).
+    unwrap(dmt_client_cache:checkout_fold_objects(Version, Folder, Acc, Opts)).
 
 -spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
