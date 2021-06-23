@@ -71,15 +71,17 @@
 -type snap() :: #snap{}.
 
 -record(object, {
-    ref :: dmt_client:object_ref(),
-    obj :: dmt_client:domain_object()
+    ref :: dmt_client:object_ref() | ets_match(),
+    obj :: dmt_client:domain_object() | ets_match()
 }).
 
 -record(user, {
-    vsn :: dmt_client:vsn(),
-    requested_at :: timestamp(),
-    pid :: pid()
+    vsn :: dmt_client:vsn() | ets_match(),
+    requested_at :: timestamp() | ets_match(),
+    pid :: pid() | ets_match()
 }).
+
+-type ets_match() :: '_' | '$1' | {atom(), ets_match()}.
 
 -type woody_error() :: {woody_error, woody_error:system_error()}.
 
