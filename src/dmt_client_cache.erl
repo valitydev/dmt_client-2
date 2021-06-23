@@ -524,7 +524,7 @@ cleanup_users(Snaps) ->
 
     ets:foldl(
         fun(Rec = #user{vsn = Version, pid = Pid, requested_at = '_'}, _) ->
-            case sets:is_element(Version, VersionMap) andalso erlang:is_alive(Pid) of
+            case sets:is_element(Version, VersionMap) andalso erlang:is_process_alive(Pid) of
                 true -> ok;
                 false -> ets:delete_object(?USERS_TABLE, Rec)
             end
