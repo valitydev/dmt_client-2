@@ -161,7 +161,7 @@ update() ->
 
 %%% gen_server callbacks
 
--spec init(_) -> {ok, state(), 0}.
+-spec init(_) -> {ok, state()}.
 init(_) ->
     ok = create_tables(),
     self() ! {update_timer, timeout},
@@ -375,7 +375,7 @@ fetch_by_reference(Reference, From, Timestamp, Opts, #state{waiters = Waiters} =
 -spec maybe_fetch(
     dmt_client:ref(),
     from() | undefined,
-    timestamp(),
+    timestamp() | undefined,
     dispatch_fun(),
     waiters(),
     dmt_client:transport_opts()
@@ -499,7 +499,8 @@ restart_cleanup_timer(State = #state{cleanup_timer = TimerRef}) ->
 cancel_timer(undefined) ->
     ok;
 cancel_timer(TimerRef) ->
-    erlang:cancel_timer(TimerRef).
+    _ = erlang:cancel_timer(TimerRef),
+    ok.
 
 unlock_version(Version, TS) ->
     ets:delete_object(?USERS_TABLE, #user{vsn = Version, requested_at = TS, pid = self()}).
