@@ -109,34 +109,22 @@ start_link() ->
 -spec get_snapshot(dmt_client:vsn(), dmt_client:transport_opts()) ->
     {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
 get_snapshot(Version, Opts) ->
-    with_version(Version, Opts, fun
-        ({ok, _Version}) -> do_get_snapshot(Version);
-        ({error, _} = Error) -> Error
-    end).
+    with_version(Version, Opts, fun() -> do_get_snapshot(Version) end).
 
 -spec get(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:transport_opts()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
 get(Version, ObjectRef, Opts) ->
-    with_version(Version, Opts, fun
-        ({ok, _Version}) -> do_get(Version, ObjectRef);
-        ({error, _} = Error) -> Error
-    end).
+    with_version(Version, Opts, fun() -> do_get(Version, ObjectRef) end).
 
 -spec get_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:transport_opts()) ->
     {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
 get_by_type(Version, ObjectType, Opts) ->
-    with_version(Version, Opts, fun
-        ({ok, _Version}) -> do_get_by_type(Version, ObjectType);
-        ({error, _} = Error) -> Error
-    end).
+    with_version(Version, Opts, fun() -> do_get_by_type(Version, ObjectType) end).
 
 -spec fold(dmt_client:vsn(), dmt_client:object_folder(Acc), Acc, dmt_client:transport_opts()) ->
     {ok, Acc} | {error, version_not_found | woody_error()}.
 fold(Version, Folder, Acc, Opts) ->
-    with_version(Version, Opts, fun
-        ({ok, _Version}) -> do_fold(Version, Folder, Acc);
-        ({error, _} = Error) -> Error
-    end).
+    with_version(Version, Opts, fun() -> do_fold(Version, Folder, Acc) end).
 
 -spec get_last_version() -> dmt_client:vsn() | no_return().
 get_last_version() ->
@@ -255,10 +243,10 @@ with_version(Version, Opts, Fun) ->
         end,
     case Result of
         {ok, Version} ->
-            Fun({ok, Version});
+            Fun();
         {fetched, Version} ->
             try
-                Fun({ok, Version})
+                Fun()
             catch
                 Class:Reason:Stacktrace ->
                     erlang:raise(Class, Reason, Stacktrace)
