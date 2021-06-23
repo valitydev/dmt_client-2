@@ -435,7 +435,8 @@ do_fetch(Reference, Opts) ->
 update_head(Head, PullLimit, Opts) ->
     FreshHistory = dmt_client_backend:pull_range(Head#'Snapshot'.version, PullLimit, Opts),
     {ok, NewHead} = dmt_history:head(FreshHistory, Head),
-    case NewHead == Head of
+    %% Received history is smaller then PullLimit => reached the top of changes
+    case map_size(FreshHistory) < PullLimit of
         true -> NewHead;
         false -> update_head(NewHead, PullLimit, Opts)
     end.
