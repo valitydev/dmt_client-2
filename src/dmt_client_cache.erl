@@ -64,7 +64,6 @@
 -record(snap, {
     vsn :: dmt_client:vsn(),
     tid :: ets:tid(),
-    cached_at :: timestamp(),
     last_access :: timestamp()
 }).
 
@@ -171,12 +170,12 @@ init(_) ->
     {ok, restart_cleanup_timer(#state{})}.
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
-handle_call({fetch_version, Version, Timestamp, Opts}, From, State) ->
+handle_call({fetch_version, Version, Opts}, From, State) ->
     case ets:member(?TABLE, Version) of
         true ->
             {reply, {ok, Version}, State};
         false ->
-            {noreply, fetch_by_reference({version, Version}, From, Timestamp, Opts, State)}
+            {noreply, fetch_by_reference({version, Version}, From, Opts, State)}
     end;
 handle_call(update, From, State) ->
     {noreply, update(From, State)};
@@ -187,7 +186,7 @@ handle_call(_Msg, _From, State) ->
 handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
     VersionWaiters = maps:get(Reference, Waiters, []),
     add_users(Reference, VersionWaiters),
-    _ = [DispatchFun(From, Result) || {From, _TS, DispatchFun} <- VersionWaiters],
+    _ = [DispatchFun(From, Result) || {From, DispatchFun} <- VersionWaiters],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
 handle_cast(update, State) ->
     {noreply, update(undefined, State)};
@@ -217,10 +216,7 @@ code_change(_OldVsn, State, _Extra) ->
 add_users({head, _}, _Waiters) ->
     ok;
 add_users({version, Version}, Waiters) ->
-    [
-        ets:insert(?USERS_TABLE, #user{vsn = Version, requested_at = TS, pid = Pid})
-        || {{Pid, TS, _}, _} <- Waiters, TS /= undefined
-    ],
+    [ets:insert(?USERS_TABLE, #user{vsn = Version, pid = Pid}) || {{Pid, _}, _} <- Waiters],
     ok.
 
 -spec create_tables() -> ok.
@@ -248,11 +244,10 @@ cast(Msg) ->
     gen_server:cast(?SERVER, Msg).
 
 with_version(Version, Opts, Fun) ->
-    TS = timestamp(),
     Result =
         case ets:member(?TABLE, Version) of
             true -> {ok, Version};
-            false -> call({fetch_version, Version, TS, Opts})
+            false -> call({fetch_version, Version, Opts})
         end,
     case Result of
         {ok, Version} ->
@@ -265,7 +260,7 @@ with_version(Version, Opts, Fun) ->
                     erlang:raise(Class, Reason, Stacktrace)
             after
                 %% Notify that we finished working on ets copy for further possible cleanup
-                unlock_version(Version, TS)
+                unlock_version(Version)
             end;
         Error ->
             Error
@@ -336,7 +331,6 @@ put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
             Snap = #snap{
                 vsn = Version,
                 tid = TID,
-                cached_at = timestamp(),
                 last_access = timestamp()
             },
             true = ets:insert(?TABLE, Snap),
@@ -368,22 +362,16 @@ get_all_snaps() ->
     ets:tab2list(?TABLE).
 
 update(From, State) ->
-    restart_update_timer(fetch_by_reference({head, #'Head'{}}, From, undefined, undefined, State)).
+    restart_update_timer(fetch_by_reference({head, #'Head'{}}, From, undefined, State)).
 
-fetch_by_reference(Reference, From, Timestamp, Opts, #state{waiters = Waiters} = State) ->
+fetch_by_reference(Reference, From, Opts, #state{waiters = Waiters} = State) ->
     DispatchFun = fun dispatch_reply/2,
-    NewWaiters = maybe_fetch(Reference, From, Timestamp, DispatchFun, Waiters, Opts),
+    NewWaiters = maybe_fetch(Reference, From, DispatchFun, Waiters, Opts),
     State#state{waiters = NewWaiters}.
 
--spec maybe_fetch(
-    dmt_client:ref(),
-    from() | undefined,
-    timestamp() | undefined,
-    dispatch_fun(),
-    waiters(),
-    dmt_client:transport_opts()
-) -> waiters().
-maybe_fetch(Reference, ReplyTo, Timestamp, DispatchFun, Waiters, Opts) ->
+-spec maybe_fetch(dmt_client:ref(), from() | undefined, dispatch_fun(), waiters(), dmt_client:transport_opts()) ->
+    waiters().
+maybe_fetch(Reference, ReplyTo, DispatchFun, Waiters, Opts) ->
     Prev =
         case maps:find(Reference, Waiters) of
             error ->
@@ -392,7 +380,7 @@ maybe_fetch(Reference, ReplyTo, Timestamp, DispatchFun, Waiters, Opts) ->
             {ok, List} ->
                 List
         end,
-    Waiters#{Reference => [{ReplyTo, Timestamp, DispatchFun} | Prev]}.
+    Waiters#{Reference => [{ReplyTo, DispatchFun} | Prev]}.
 
 -spec schedule_fetch(dmt_client:ref(), dmt_client:transport_opts()) -> pid().
 schedule_fetch(Reference, Opts) ->
@@ -505,8 +493,8 @@ cancel_timer(TimerRef) ->
     _ = erlang:cancel_timer(TimerRef),
     ok.
 
-unlock_version(Version, TS) ->
-    ets:delete_object(?USERS_TABLE, #user{vsn = Version, requested_at = TS, pid = self()}).
+unlock_version(Version) ->
+    ets:delete_object(?USERS_TABLE, #user{vsn = Version, pid = self()}).
 
 -spec cleanup() -> ok.
 cleanup() ->
@@ -560,15 +548,8 @@ ets_memory(TID) ->
 -spec remove_earliest([snap()], dmt_client:vsn()) -> [snap()].
 remove_earliest([#snap{vsn = HeadVersion} | Tail], HeadVersion) ->
     Tail;
-remove_earliest([Snap = #snap{vsn = Version, cached_at = StoredAt} | Tail], HeadVersion) ->
-    MatchSpec = [
-        {
-            #user{vsn = Version, pid = '_', requested_at = '$1'},
-            [{'<', '$1', StoredAt}],
-            ['$_']
-        }
-    ],
-    case ets:select_count(?USERS_TABLE, MatchSpec) of
+remove_earliest([Snap = #snap{vsn = Version} | Tail], HeadVersion) ->
+    case ets:select_count(?USERS_TABLE, [{#user{vsn = Version, pid = '_'}, [], ['$_']}]) of
         0 ->
             remove_snap(Snap),
             Tail;
@@ -579,7 +560,7 @@ remove_earliest([Snap = #snap{vsn = Version, cached_at = StoredAt} | Tail], Head
 -spec remove_snap(snap()) -> ok.
 remove_snap(#snap{tid = TID, vsn = Version}) ->
     true = ets:delete(?TABLE, Version),
-    _ = ets:select_delete(?USERS_TABLE, [{#user{vsn = Version, requested_at = '_', pid = '_'}, [], ['$_']}]),
+    _ = ets:select_delete(?USERS_TABLE, [{#user{vsn = Version, pid = '_'}, [], ['$_']}]),
     true = ets:delete(TID),
     ok.
 

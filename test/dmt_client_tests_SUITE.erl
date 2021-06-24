@@ -63,9 +63,7 @@ poll(_C) ->
     _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:checkout(latest),
     Object = dmt_client:checkout_object(latest, Ref),
-    #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref),
-    timer:sleep(5000),
-    erlang:display(ets:tab2list(dmt_client_cache_users)).
+    #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref).
 
 fixture_domain_object(Ref, Data) ->
     {category, #'domain_CategoryObject'{
