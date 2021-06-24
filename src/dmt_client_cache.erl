@@ -512,30 +512,10 @@ unlock_version(Version, TS) ->
 cleanup() ->
     Snaps = get_all_snaps(),
     Sorted = lists:keysort(#snap.last_access, Snaps),
-    cleanup_users(Snaps),
     case do_get_last_version() of
         {ok, HeadVersion} -> cleanup(Sorted, HeadVersion);
         _ -> ok
     end.
-
-cleanup_users(Snaps) ->
-    VersionMap =
-        lists:foldl(
-            fun(#snap{vsn = Version}, Acc) -> sets:add_element(Version, Acc) end,
-            sets:new(),
-            Snaps
-        ),
-
-    ets:foldl(
-        fun(Rec = #user{vsn = Version, pid = Pid, requested_at = '_'}, _) ->
-            case sets:is_element(Version, VersionMap) andalso erlang:is_alive(Pid) of
-                true -> ok;
-                false -> ets:delete_object(?USERS_TABLE, Rec)
-            end
-        end,
-        ok,
-        ?USERS_TABLE
-    ).
 
 -spec cleanup([snap()], dmt_client:vsn()) -> ok.
 cleanup([], _HeadVersion) ->
