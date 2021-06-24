@@ -82,7 +82,7 @@ checkout(Reference) ->
 -spec checkout(version(), transport_opts()) -> snapshot() | no_return().
 checkout(Reference, Opts) ->
     Version = ref_to_version(Reference),
-    case dmt_client_cache:checkout(Version, Opts) of
+    case dmt_client_cache:get(Version, Opts) of
         {ok, Snapshot} ->
             Snapshot;
         {error, Error} ->
@@ -100,7 +100,7 @@ checkout_object(Reference, ObjectReference) ->
 -spec checkout_object(version(), object_ref(), transport_opts()) -> domain_object() | no_return().
 checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:checkout_object(Version, ObjectReference, Opts)).
+    unwrap(dmt_client_cache:get_object(Version, ObjectReference, Opts)).
 
 -spec checkout_versioned_object(object_ref()) -> versioned_object() | no_return().
 checkout_versioned_object(ObjectReference) ->
@@ -126,7 +126,7 @@ checkout_objects_by_type(Reference, ObjectType) ->
 -spec checkout_objects_by_type(version(), object_type(), transport_opts()) -> [domain_object()] | no_return().
 checkout_objects_by_type(Reference, ObjectType, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:checkout_objects_by_type(Version, ObjectType, Opts)).
+    unwrap(dmt_client_cache:get_objects_by_type(Version, ObjectType, Opts)).
 
 -spec checkout_filter_objects(object_filter()) -> [{object_type(), domain_object()}] | no_return().
 checkout_filter_objects(Filter) ->
@@ -158,7 +158,7 @@ checkout_fold_objects(Reference, Folder, Acc) ->
 -spec checkout_fold_objects(version(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
 checkout_fold_objects(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
-    unwrap(dmt_client_cache:checkout_fold_objects(Version, Folder, Acc, Opts)).
+    unwrap(dmt_client_cache:fold_objects(Version, Folder, Acc, Opts)).
 
 -spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
