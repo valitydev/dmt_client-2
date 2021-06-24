@@ -142,12 +142,7 @@ get_last_version() ->
 
 -spec update() -> {ok, dmt_client:vsn()} | {error, woody_error()}.
 update() ->
-    case call(update) of
-        {fetched, Version} ->
-            {ok, Version};
-        AsIs ->
-            AsIs
-    end.
+    call(update).
 
 %%% gen_server callbacks
 
@@ -159,11 +154,16 @@ init(_) ->
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
 handle_call({fetch_version, Version, Timestamp, Opts}, From, State) ->
+    Reference = {version, Version},
     case ets:member(?TABLE, Version) of
         true ->
+            %% Caller had to request version via server =>
+            %% version was not available before the call,
+            %% but server already fetched it in between the calls
+            add_users(Reference, [{From, Timestamp, undefined}]),
             {reply, {ok, Version}, State};
         false ->
-            {noreply, fetch_by_reference({version, Version}, From, Timestamp, Opts, State)}
+            {noreply, fetch_by_reference(Reference, From, Timestamp, Opts, State)}
     end;
 handle_call(update, From, State) ->
     {noreply, update(From, State)};
@@ -238,37 +238,47 @@ with_version(Version, Opts, Fun) ->
     TS = timestamp(),
     Result =
         case ets:member(?TABLE, Version) of
-            true -> {ok, Version};
-            false -> call({fetch_version, Version, TS, Opts})
+            true ->
+                {ok, Version};
+            false ->
+                case call({fetch_version, Version, TS, Opts}) of
+                    {ok, Version} -> {fetched, Version};
+                    AsIs -> AsIs
+                end
         end,
-    case Result of
-        {ok, Version} ->
-            Fun();
-        {fetched, Version} ->
-            try
-                Fun()
-            catch
-                Class:Reason:Stacktrace ->
-                    erlang:raise(Class, Reason, Stacktrace)
-            after
-                %% Notify that we finished working on ets copy for further possible cleanup
-                unlock_version(Version, TS)
-            end;
-        Error ->
-            Error
+    try
+        case Result of
+            {ok, Version} ->
+                Fun();
+            {fetched, Version} ->
+                try
+                    Fun()
+                catch
+                    Class:Reason:Stacktrace ->
+                        erlang:raise(Class, Reason, Stacktrace)
+                after
+                    %% Notify that we finished working on ets copy for further possible cleanup
+                    unlock_version(Version, TS)
+                end;
+            Error ->
+                Error
+        end
+    catch
+        throw:cache_miss ->
+            with_version(Version, Opts, Fun)
     end.
 
 -spec do_get(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 do_get(Version) ->
     case get_snap(Version) of
         {ok, Snap} ->
-            build_snapshot(Snap);
+            {ok, build_snapshot(Snap)};
         {error, version_not_found} = Error ->
             Error
     end.
 
 -spec do_get_object(dmt_client:vsn(), dmt_client:object_ref()) ->
-    {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
+    {ok, dmt_client:domain_object()} | {error, object_not_found} | no_return().
 do_get_object(Version, ObjectRef) ->
     {ok, #snap{tid = TID}} = get_snap(Version),
     try ets:lookup(TID, ObjectRef) of
@@ -278,10 +288,8 @@ do_get_object(Version, ObjectRef) ->
             {error, object_not_found}
     catch
         % table was deleted
-        % DISCUSS: is it correct though? Wouldn't recuring back to original function be better?
-        % This way, we can fetch wiped snapshot again only for this version
         error:badarg ->
-            {error, version_not_found}
+            throw(cache_miss)
     end.
 
 do_get_objects_by_type(Version, ObjectType) ->
@@ -293,9 +301,9 @@ do_get_objects_by_type(Version, ObjectType) ->
         Result ->
             {ok, Result}
     catch
-        %% DISCUSS: same as above for do_get_object
+        % table was deleted
         error:badarg ->
-            {error, version_not_found}
+            throw(cache_miss)
     end.
 
 do_fold_objects(Version, Folder, Acc) ->
@@ -307,9 +315,9 @@ do_fold_objects(Version, Folder, Acc) ->
         Result ->
             {ok, Result}
     catch
-        %% DISCUSS: same as above for do_get_object
+        % table was deleted
         error:badarg ->
-            {error, version_not_found}
+            throw(cache_miss)
     end.
 
 -spec put_snapshot(dmt_client:snapshot()) -> ok.
@@ -434,11 +442,11 @@ update_head(Head, PullLimit, Opts) ->
 dispatch_reply(undefined, _Result) ->
     ok;
 dispatch_reply(From, {ok, Version}) ->
-    gen_server:reply(From, {fetched, Version});
+    gen_server:reply(From, {ok, Version});
 dispatch_reply(From, Error) ->
     gen_server:reply(From, Error).
 
--spec build_snapshot(snap()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
+-spec build_snapshot(snap()) -> dmt_client:snapshot() | no_return().
 build_snapshot(#snap{vsn = Version, tid = TID}) ->
     try
         Domain = ets:foldl(
@@ -449,18 +457,23 @@ build_snapshot(#snap{vsn = Version, tid = TID}) ->
             dmt_domain:new(),
             TID
         ),
-        {ok, #'Snapshot'{version = Version, domain = Domain}}
+        #'Snapshot'{version = Version, domain = Domain}
     catch
         % table was deleted due to cleanup process or crash
         error:badarg ->
-            {error, version_not_found}
+            throw(cache_miss)
     end.
 
 -spec latest_snapshot() -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 latest_snapshot() ->
     case do_get_last_version() of
         {ok, Version} ->
-            do_get(Version);
+            try
+                do_get(Version)
+            catch
+                throw:cache_miss ->
+                    latest_snapshot()
+            end;
         {error, version_not_found} = Error ->
             Error
     end.
