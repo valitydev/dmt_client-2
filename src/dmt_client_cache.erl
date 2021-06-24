@@ -141,7 +141,7 @@ update() ->
 
 %%% gen_server callbacks
 
--spec init(_) -> {ok, state()}.
+-spec init(_) -> {ok, state(), 0}.
 init(_) ->
     ok = create_tables(),
     {ok, #state{}, 0}.
