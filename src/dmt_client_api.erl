@@ -7,8 +7,7 @@
 -export([pull_range/3]).
 -export([checkout_object/3]).
 
--spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
-    dmt_client:version() | no_return().
+-spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:transport_opts()) -> dmt_client:vsn() | no_return().
 commit(Version, Commit, Opts) ->
     call('Repository', 'Commit', {Version, Commit}, Opts).
 
@@ -16,7 +15,7 @@ commit(Version, Commit, Opts) ->
 checkout(Reference, Opts) ->
     call('Repository', 'Checkout', {Reference}, Opts).
 
--spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
+-spec pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
 pull_range(After, Limit, Opts) ->
     call('Repository', 'PullRange', {After, Limit}, Opts).

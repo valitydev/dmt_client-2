@@ -83,8 +83,7 @@ end_per_suite(C) ->
 
 %%% Dummy API
 
--spec commit(dmt_client:version(), dmt_client:commit(), dmt_client:transport_opts()) ->
-    dmt_client:version() | no_return().
+-spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:transport_opts()) -> dmt_client:vsn() | no_return().
 commit(Version, _Commit, _Opts) ->
     Version.
 
@@ -105,7 +104,7 @@ checkout({head, #'Head'{}}, _Opts) ->
 checkout_object(_Reference, _ObjectReference, _Opts) ->
     erlang:throw(#'ObjectNotFound'{}).
 
--spec pull_range(dmt_client:version(), dmt_client:limit(), dmt_client:transport_opts()) ->
+-spec pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:transport_opts()) ->
     dmt_client:history() | no_return().
 pull_range(_Version, _Limit, _Opts) ->
     timer:sleep(5000),
@@ -115,18 +114,18 @@ pull_range(_Version, _Limit, _Opts) ->
 
 -spec get_snapshot_success(config()) -> any().
 get_snapshot_success(_C) ->
-    {ok, #'Snapshot'{}} = dmt_client_cache:get(?existing_version).
+    {ok, #'Snapshot'{}} = dmt_client_cache:get(?existing_version, undefined).
 
 -spec snapshot_not_found(config()) -> any().
 snapshot_not_found(_C) ->
-    {error, version_not_found} = dmt_client_cache:get(1).
+    {error, version_not_found} = dmt_client_cache:get(?notfound_version, undefined).
 
 -spec woody_error(config()) -> any().
 woody_error(_C) ->
-    {error, {woody_error, _}} = dmt_client_cache:get(?unavailable_version).
+    {error, {woody_error, _}} = dmt_client_cache:get(?unavailable_version, undefined).
 
 -spec object_not_found(config()) -> any().
 object_not_found(_C) ->
     Ref = {category, #'domain_CategoryRef'{id = 1}},
-    {error, version_not_found} = dmt_client_cache:get_object(?notfound_version, Ref),
-    {error, object_not_found} = dmt_client_cache:get_object(?existing_version, Ref).
+    {error, version_not_found} = dmt_client_cache:get_object(?notfound_version, Ref, undefined),
+    {error, object_not_found} = dmt_client_cache:get_object(?existing_version, Ref, undefined).
