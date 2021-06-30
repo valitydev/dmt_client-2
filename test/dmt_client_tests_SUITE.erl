@@ -58,7 +58,7 @@ poll(_C) ->
     Ref = fixture_object_ref(1),
     #'ObjectNotFound'{} = (catch dmt_client:checkout_object(latest, Ref)),
     #'Snapshot'{version = Version1} = dmt_client:checkout(latest),
-    Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, undefined),
+    Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, #{}),
     true = Version1 < Version2,
     _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:checkout(latest),

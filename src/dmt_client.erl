@@ -53,7 +53,7 @@
 -export_type([domain_object/0]).
 -export_type([domain/0]).
 -export_type([history/0]).
--export_type([transport_opts/0]).
+-export_type([opts/0]).
 
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
@@ -71,15 +71,18 @@
 -type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
 -type history() :: dmsl_domain_config_thrift:'History'().
--type transport_opts() :: woody_client_thrift_http_transport:transport_options() | undefined.
+-type opts() :: #{
+    transport_opts => woody_client_thrift_http_transport:transport_options(),
+    woody_context => woody_context:ctx()
+}.
 
 %%% API
 
 -spec checkout(version()) -> snapshot() | no_return().
 checkout(Reference) ->
-    checkout(Reference, undefined).
+    checkout(Reference, #{}).
 
--spec checkout(version(), transport_opts()) -> snapshot() | no_return().
+-spec checkout(version(), opts()) -> snapshot() | no_return().
 checkout(Reference, Opts) ->
     Version = ref_to_version(Reference),
     case dmt_client_cache:get(Version, Opts) of
@@ -95,9 +98,9 @@ checkout_object(ObjectReference) ->
 
 -spec checkout_object(version(), object_ref()) -> domain_object() | no_return().
 checkout_object(Reference, ObjectReference) ->
-    checkout_object(Reference, ObjectReference, undefined).
+    checkout_object(Reference, ObjectReference, #{}).
 
--spec checkout_object(version(), object_ref(), transport_opts()) -> domain_object() | no_return().
+-spec checkout_object(version(), object_ref(), opts()) -> domain_object() | no_return().
 checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:get_object(Version, ObjectReference, Opts)).
@@ -108,9 +111,9 @@ checkout_versioned_object(ObjectReference) ->
 
 -spec checkout_versioned_object(version(), object_ref()) -> versioned_object() | no_return().
 checkout_versioned_object(Reference, ObjectReference) ->
-    checkout_versioned_object(Reference, ObjectReference, undefined).
+    checkout_versioned_object(Reference, ObjectReference, #{}).
 
--spec checkout_versioned_object(version(), object_ref(), transport_opts()) -> versioned_object() | no_return().
+-spec checkout_versioned_object(version(), object_ref(), opts()) -> versioned_object() | no_return().
 checkout_versioned_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     #'VersionedObject'{version = Version, object = checkout_object(Reference, ObjectReference, Opts)}.
@@ -121,9 +124,9 @@ checkout_objects_by_type(ObjectType) ->
 
 -spec checkout_objects_by_type(version(), object_type()) -> [domain_object()] | no_return().
 checkout_objects_by_type(Reference, ObjectType) ->
-    checkout_objects_by_type(Reference, ObjectType, undefined).
+    checkout_objects_by_type(Reference, ObjectType, #{}).
 
--spec checkout_objects_by_type(version(), object_type(), transport_opts()) -> [domain_object()] | no_return().
+-spec checkout_objects_by_type(version(), object_type(), opts()) -> [domain_object()] | no_return().
 checkout_objects_by_type(Reference, ObjectType, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:get_objects_by_type(Version, ObjectType, Opts)).
@@ -134,10 +137,9 @@ checkout_filter_objects(Filter) ->
 
 -spec checkout_filter_objects(version(), object_filter()) -> [{object_type(), domain_object()}] | no_return().
 checkout_filter_objects(Reference, Filter) ->
-    checkout_filter_objects(Reference, Filter, undefined).
+    checkout_filter_objects(Reference, Filter, #{}).
 
--spec checkout_filter_objects(version(), object_filter(), transport_opts()) ->
-    [{object_type(), domain_object()}] | no_return().
+-spec checkout_filter_objects(version(), object_filter(), opts()) -> [{object_type(), domain_object()}] | no_return().
 checkout_filter_objects(Reference, Filter, Opts) ->
     Folder = fun(Type, Object, Acc) ->
         case Filter(Type, Object) of
@@ -153,18 +155,18 @@ checkout_fold_objects(Folder, Acc) ->
 
 -spec checkout_fold_objects(version(), object_folder(Acc), Acc) -> Acc | no_return().
 checkout_fold_objects(Reference, Folder, Acc) ->
-    checkout_fold_objects(Reference, Folder, Acc, undefined).
+    checkout_fold_objects(Reference, Folder, Acc, #{}).
 
--spec checkout_fold_objects(version(), object_folder(Acc), Acc, transport_opts()) -> Acc | no_return().
+-spec checkout_fold_objects(version(), object_folder(Acc), Acc, opts()) -> Acc | no_return().
 checkout_fold_objects(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:fold_objects(Version, Folder, Acc, Opts)).
 
 -spec commit(version(), commit()) -> version() | no_return().
 commit(Version, Commit) ->
-    commit(Version, Commit, undefined).
+    commit(Version, Commit, #{}).
 
--spec commit(version(), commit(), transport_opts()) -> version() | no_return().
+-spec commit(version(), commit(), opts()) -> version() | no_return().
 commit(Version, Commit, Opts) ->
     dmt_client_backend:commit(Version, Commit, Opts).
 
@@ -174,9 +176,9 @@ get_last_version() ->
 
 -spec pull_range(version(), limit()) -> history() | no_return().
 pull_range(Version, Limit) ->
-    pull_range(Version, Limit, undefined).
+    pull_range(Version, Limit, #{}).
 
--spec pull_range(version(), limit(), transport_opts()) -> history() | no_return().
+-spec pull_range(version(), limit(), opts()) -> history() | no_return().
 pull_range(Version, Limit, Opts) ->
     dmt_client_backend:pull_range(Version, Limit, Opts).
 
