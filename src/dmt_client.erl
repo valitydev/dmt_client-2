@@ -68,6 +68,10 @@
 -type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
 -type object_folder(Acc) :: fun((object_type(), domain_object(), Acc) -> Acc).
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
+%% HACK: this is type required for checkout_objects_by_type:
+%% domain_object is any object from union, tagged with it's name
+%% yet there's no way to extract typespecs for untagged objects
+-type untagged_domain_object() :: tuple().
 -type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
 -type history() :: dmsl_domain_config_thrift:'History'().
@@ -118,15 +122,15 @@ checkout_versioned_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     #'VersionedObject'{version = Version, object = checkout_object(Reference, ObjectReference, Opts)}.
 
--spec checkout_objects_by_type(object_type()) -> [domain_object()] | no_return().
+-spec checkout_objects_by_type(object_type()) -> [untagged_domain_object()] | no_return().
 checkout_objects_by_type(ObjectType) ->
     checkout_objects_by_type(latest, ObjectType).
 
--spec checkout_objects_by_type(version(), object_type()) -> [domain_object()] | no_return().
+-spec checkout_objects_by_type(version(), object_type()) -> [untagged_domain_object()] | no_return().
 checkout_objects_by_type(Reference, ObjectType) ->
     checkout_objects_by_type(Reference, ObjectType, #{}).
 
--spec checkout_objects_by_type(version(), object_type(), opts()) -> [domain_object()] | no_return().
+-spec checkout_objects_by_type(version(), object_type(), opts()) -> [untagged_domain_object()] | no_return().
 checkout_objects_by_type(Reference, ObjectType, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:get_objects_by_type(Version, ObjectType, Opts)).
@@ -162,23 +166,23 @@ checkout_fold_objects(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:fold_objects(Version, Folder, Acc, Opts)).
 
--spec commit(version(), commit()) -> version() | no_return().
+-spec commit(vsn(), commit()) -> vsn() | no_return().
 commit(Version, Commit) ->
     commit(Version, Commit, #{}).
 
--spec commit(version(), commit(), opts()) -> version() | no_return().
+-spec commit(vsn(), commit(), opts()) -> vsn() | no_return().
 commit(Version, Commit, Opts) ->
     dmt_client_backend:commit(Version, Commit, Opts).
 
--spec get_last_version() -> version().
+-spec get_last_version() -> vsn().
 get_last_version() ->
     dmt_client_cache:get_last_version().
 
--spec pull_range(version(), limit()) -> history() | no_return().
+-spec pull_range(vsn(), limit()) -> history() | no_return().
 pull_range(Version, Limit) ->
     pull_range(Version, Limit, #{}).
 
--spec pull_range(version(), limit(), opts()) -> history() | no_return().
+-spec pull_range(vsn(), limit(), opts()) -> history() | no_return().
 pull_range(Version, Limit, Opts) ->
     dmt_client_backend:pull_range(Version, Limit, Opts).
 

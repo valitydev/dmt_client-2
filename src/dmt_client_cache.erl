@@ -216,7 +216,7 @@ ensure_version(Version, Opts) ->
 
 -spec do_get(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
 do_get(Version) ->
-    case get_snap(Version) of
+    case fetch_snap(Version) of
         {ok, Snap} ->
             build_snapshot(Snap);
         {error, version_not_found} = Error ->
@@ -226,8 +226,10 @@ do_get(Version) ->
 -spec do_get_object(dmt_client:vsn(), dmt_client:object_ref()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
 do_get_object(Version, ObjectRef) ->
-    {ok, #snap{tid = TID}} = get_snap(Version),
-    try ets:lookup(TID, ObjectRef) of
+    try
+        Snap = get_snap(Version),
+        ets:lookup(Snap#snap.tid, ObjectRef)
+    of
         [#object{obj = Object}] ->
             {ok, Object};
         [] ->
@@ -241,11 +243,13 @@ do_get_object(Version, ObjectRef) ->
     end.
 
 do_get_objects_by_type(Version, ObjectType) ->
-    {ok, #snap{tid = TID}} = get_snap(Version),
     MatchSpec = [
         {{object, '_', {ObjectType, '$1'}}, [], ['$1']}
     ],
-    try ets:select(TID, MatchSpec) of
+    try
+        Snap = get_snap(Version),
+        ets:select(Snap#snap.tid, MatchSpec)
+    of
         Result ->
             {ok, Result}
     catch
@@ -255,11 +259,13 @@ do_get_objects_by_type(Version, ObjectType) ->
     end.
 
 do_fold_objects(Version, Folder, Acc) ->
-    {ok, #snap{tid = TID}} = get_snap(Version),
     MappedFolder = fun({object, {Type, _Ref}, {Type, Object}}, AccIn) ->
         Folder(Type, Object, AccIn)
     end,
-    try ets:foldl(MappedFolder, Acc, TID) of
+    try
+        Snap = get_snap(Version),
+        ets:foldl(MappedFolder, Acc, Snap#snap.tid)
+    of
         Result ->
             {ok, Result}
     catch
@@ -270,7 +276,7 @@ do_fold_objects(Version, Folder, Acc) ->
 
 -spec put_snapshot(dmt_client:snapshot()) -> ok.
 put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
-    case get_snap(Version) of
+    case fetch_snap(Version) of
         {ok, _Snap} ->
             ok;
         {error, version_not_found} ->
@@ -296,8 +302,15 @@ put_domain_to_table(TID, Domain) ->
         Domain
     ).
 
--spec get_snap(dmt_client:vsn()) -> {ok, snap()} | {error, version_not_found}.
+-spec get_snap(dmt_client:vsn()) -> snap() | no_return().
 get_snap(Version) ->
+    case fetch_snap(Version) of
+        {ok, Snap} -> Snap;
+        {error, version_not_found} -> error(badarg)
+    end.
+
+-spec fetch_snap(dmt_client:vsn()) -> {ok, snap()} | {error, version_not_found}.
+fetch_snap(Version) ->
     case ets:lookup(?TABLE, Version) of
         [Snap] ->
             _ = update_last_access(Version),
