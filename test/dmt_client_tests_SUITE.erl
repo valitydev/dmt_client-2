@@ -56,13 +56,13 @@ end_per_suite(C) ->
 poll(_C) ->
     Object = fixture_domain_object(1, <<"InsertFixture">>),
     Ref = fixture_object_ref(1),
-    #'ObjectNotFound'{} = (catch dmt_client:checkout_object(latest, Ref)),
-    #'Snapshot'{version = Version1} = dmt_client:checkout(latest),
+    #'ObjectNotFound'{} = (catch dmt_client:checkout_object(Ref)),
+    #'Snapshot'{version = Version1} = dmt_client:checkout(),
     Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, #{}),
     true = Version1 < Version2,
     _ = dmt_client_cache:update(),
-    #'Snapshot'{version = Version2} = dmt_client:checkout(latest),
-    Object = dmt_client:checkout_object(latest, Ref),
+    #'Snapshot'{version = Version2} = dmt_client:checkout(),
+    Object = dmt_client:checkout_object(Ref),
     #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref).
 
 fixture_domain_object(Ref, Data) ->

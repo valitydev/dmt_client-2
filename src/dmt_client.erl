@@ -7,6 +7,7 @@
 -behaviour(application).
 
 %% API
+-export([checkout/0]).
 -export([checkout/1]).
 -export([checkout/2]).
 -export([checkout_object/1]).
@@ -24,9 +25,11 @@
 -export([checkout_fold_objects/2]).
 -export([checkout_fold_objects/3]).
 -export([checkout_fold_objects/4]).
+-export([commit/1]).
 -export([commit/2]).
 -export([commit/3]).
 -export([get_last_version/0]).
+-export([pull_range/1]).
 -export([pull_range/2]).
 -export([pull_range/3]).
 
@@ -81,6 +84,10 @@
 }.
 
 %%% API
+
+-spec checkout() -> snapshot() | no_return().
+checkout() ->
+    checkout(latest).
 
 -spec checkout(version()) -> snapshot() | no_return().
 checkout(Reference) ->
@@ -166,24 +173,34 @@ checkout_fold_objects(Reference, Folder, Acc, Opts) ->
     Version = ref_to_version(Reference),
     unwrap(dmt_client_cache:fold_objects(Version, Folder, Acc, Opts)).
 
--spec commit(vsn(), commit()) -> vsn() | no_return().
-commit(Version, Commit) ->
-    commit(Version, Commit, #{}).
+-spec commit(commit()) -> vsn() | no_return().
+commit(Commit) ->
+    commit(latest, Commit).
 
--spec commit(vsn(), commit(), opts()) -> vsn() | no_return().
-commit(Version, Commit, Opts) ->
+-spec commit(version(), commit()) -> vsn() | no_return().
+commit(Reference, Commit) ->
+    commit(Reference, Commit, #{}).
+
+-spec commit(version(), commit(), opts()) -> vsn() | no_return().
+commit(Reference, Commit, Opts) ->
+    Version = ref_to_version(Reference),
     dmt_client_backend:commit(Version, Commit, Opts).
 
 -spec get_last_version() -> vsn().
 get_last_version() ->
     dmt_client_cache:get_last_version().
 
--spec pull_range(vsn(), limit()) -> history() | no_return().
-pull_range(Version, Limit) ->
-    pull_range(Version, Limit, #{}).
+-spec pull_range(limit()) -> history() | no_return().
+pull_range(Limit) ->
+    pull_range(latest, Limit).
 
--spec pull_range(vsn(), limit(), opts()) -> history() | no_return().
-pull_range(Version, Limit, Opts) ->
+-spec pull_range(version(), limit()) -> history() | no_return().
+pull_range(Reference, Limit) ->
+    pull_range(Reference, Limit, #{}).
+
+-spec pull_range(version(), limit(), opts()) -> history() | no_return().
+pull_range(Reference, Limit, Opts) ->
+    Version = ref_to_version(Reference),
     dmt_client_backend:pull_range(Version, Limit, Opts).
 
 %% Health check API
