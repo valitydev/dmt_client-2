@@ -459,7 +459,7 @@ cleanup([], _HeadVersion) ->
     ok;
 cleanup(Snaps, HeadVersion) ->
     {Elements, Memory} = get_cache_size(),
-    CacheLimits = genlib_app:env(dmt_client, max_cache_size),
+    CacheLimits = genlib_app:env(dmt_client, max_cache_size, #{}),
     MaxElements = genlib_map:get(elements, CacheLimits, 20),
     % 50Mb by default
     MaxMemory = genlib_map:get(memory, CacheLimits, 52428800),
