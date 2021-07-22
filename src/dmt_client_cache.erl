@@ -519,7 +519,6 @@ timestamp() ->
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 % dirty hack for warn_missing_spec
 -spec test() -> any().
@@ -581,23 +580,20 @@ test_last_access() ->
 test_get_object() ->
     set_cache_limits(1),
     Version = 5,
-    Cat = {_, Ref, _} = fixture(category),
-    Domain = dmt_insert_many(
-        [{category, Cat}]
-    ),
+    Cat = {_, {_, Ref, _}} = dmt_client_fixtures:fixture(category),
+    Domain = dmt_client_fixtures:domain_insert(Cat),
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
-
-    {ok, {category, Cat}} = get_object(Version, {category, Ref}, #{}).
+    {ok, Cat} = get_object(Version, {category, Ref}, #{}).
 
 -spec test_get_object_by_type() -> _.
 test_get_object_by_type() ->
     set_cache_limits(1),
     Version = 6,
-    Cat1 = fixture(category),
-    Cat2 = fixture(category_2),
+    {_, Cat1} = dmt_client_fixtures:fixture(category),
+    {_, Cat2} = dmt_client_fixtures:fixture(category_2),
 
-    Domain = domain_with_all_fixtures(),
+    Domain = dmt_client_fixtures:domain_with_all_fixtures(),
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
@@ -609,7 +605,7 @@ test_fold() ->
     set_cache_limits(1),
     Version = 7,
 
-    Domain = domain_with_all_fixtures(),
+    Domain = dmt_client_fixtures:domain_with_all_fixtures(),
 
     ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
 
@@ -632,58 +628,6 @@ test_fold() ->
     ),
 
     [1, 2] = ordsets:to_list(OrdSet).
-
-domain_with_all_fixtures() ->
-    dmt_insert_many(
-        [
-            {category, fixture(category)},
-            {category, fixture(category_2)},
-            {currency, fixture(currency)}
-        ]
-    ).
-
-dmt_insert_many(Objects) ->
-    dmt_insert_many(Objects, dmt_domain:new()).
-
-dmt_insert_many(Objects, Domain) ->
-    lists:foldl(
-        fun(Object, DomainIn) ->
-            {ok, DomainOut} = dmt_domain:insert(Object, DomainIn),
-            DomainOut
-        end,
-        Domain,
-        Objects
-    ).
-
-fixture(ID) ->
-    maps:get(
-        ID,
-        #{
-            category => #'domain_CategoryObject'{
-                ref = #'domain_CategoryRef'{id = 1},
-                data = #'domain_Category'{
-                    name = <<"cat">>,
-                    description = <<"Sample category">>
-                }
-            },
-            category_2 => #'domain_CategoryObject'{
-                ref = #'domain_CategoryRef'{id = 2},
-                data = #'domain_Category'{
-                    name = <<"dog">>,
-                    description = <<"Sample category">>
-                }
-            },
-            currency => #'domain_CurrencyObject'{
-                ref = #'domain_CurrencyRef'{symbolic_code = <<"USD">>},
-                data = #'domain_Currency'{
-                    name = <<"dog">>,
-                    symbolic_code = <<"USD">>,
-                    numeric_code = 840,
-                    exponent = 2
-                }
-            }
-        }
-    ).
 
 % TEST
 -endif.

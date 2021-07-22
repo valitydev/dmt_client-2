@@ -1,12 +1,14 @@
 -module(dmt_client_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([all/0]).
 -export([groups/0]).
 -export([init_per_suite/1]).
 -export([end_per_suite/1]).
--export([poll/1]).
+-export([insert_and_all_checkouts/1]).
+-export([inserts_updates_upserts_and_removes/1]).
 
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
@@ -16,14 +18,15 @@
 -spec all() -> [term()].
 all() ->
     [
-        {group, basic_lifecycle}
+        {group, all}
     ].
 
 -spec groups() -> [term()].
 groups() ->
     [
-        {basic_lifecycle, [sequence], [
-            poll
+        {all, [sequence], [
+            insert_and_all_checkouts,
+            inserts_updates_upserts_and_removes
         ]}
     ].
 
@@ -52,24 +55,54 @@ end_per_suite(C) ->
 
 %%
 %% tests
--spec poll(term()) -> term().
-poll(_C) ->
-    Object = fixture_domain_object(1, <<"InsertFixture">>),
-    Ref = fixture_object_ref(1),
+-spec insert_and_all_checkouts(term()) -> _.
+insert_and_all_checkouts(_C) ->
+    Object = dmt_client_fixtures:fixture_domain_object(1, <<"InsertFixture">>),
+    Ref = dmt_client_fixtures:fixture_object_ref(1),
     #'ObjectNotFound'{} = (catch dmt_client:checkout_object(Ref)),
     #'Snapshot'{version = Version1} = dmt_client:checkout(),
-    Version2 = dmt_client_api:commit(Version1, #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]}, #{}),
+    Version2 = dmt_client:insert(Object),
     true = Version1 < Version2,
     _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:checkout(),
     Object = dmt_client:checkout_object(Ref),
     #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref).
 
-fixture_domain_object(Ref, Data) ->
-    {category, #'domain_CategoryObject'{
-        ref = #'domain_CategoryRef'{id = Ref},
-        data = #'domain_Category'{name = Data, description = Data}
-    }}.
+-spec inserts_updates_upserts_and_removes(term()) -> _.
+inserts_updates_upserts_and_removes(_C) ->
+    Cat1 = dmt_client_fixtures:fixture_category_object(10, <<"InsertFixture">>),
+    Cat1Modified = dmt_client_fixtures:fixture_category_object(10, <<"Modified">>),
+    Cat1ModifiedAgain = dmt_client_fixtures:fixture_category_object(10, <<"Strike Again">>),
+    Cat1Ref = dmt_client_fixtures:fixture_category_ref(10),
 
-fixture_object_ref(Ref) ->
-    {category, #'domain_CategoryRef'{id = Ref}}.
+    Cat2 = dmt_client_fixtures:fixture_category_object(11, <<"Another cat">>),
+    Cat2Ref = dmt_client_fixtures:fixture_category_ref(11),
+
+    Version1 = dmt_client:get_last_version(),
+    Version2 = dmt_client:insert(Cat1),
+    Cat1 = dmt_client:checkout_object(Cat1Ref),
+
+    Version3 = dmt_client:update(Cat1Modified),
+    #'VersionedObject'{version = Version3, object = Cat1Modified} = dmt_client:checkout_versioned_object(Cat1Ref),
+
+    Version4 = dmt_client:upsert([Cat1ModifiedAgain, Cat2]),
+    Cat1ModifiedAgain = dmt_client:checkout_object(Cat1Ref),
+    Cat2 = dmt_client:checkout_object(Cat2Ref),
+
+    Version5 = dmt_client:remove(Cat1ModifiedAgain),
+    ?assertThrow(
+        #'ObjectNotFound'{},
+        dmt_client:checkout_object(Cat1Ref)
+    ),
+    Cat2 = dmt_client:checkout_object(Cat2Ref),
+
+    %% Check that all versions are strictly greater than previous ones
+    Versions = [
+        Version1,
+        Version2,
+        Version3,
+        Version4,
+        Version5
+    ],
+
+    ?assertEqual(Versions, ordsets:from_list(Versions)).
