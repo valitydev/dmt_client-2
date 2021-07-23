@@ -63,7 +63,6 @@ insert_and_all_checkouts(_C) ->
     #'Snapshot'{version = Version1} = dmt_client:checkout(),
     Version2 = dmt_client:insert(Object),
     true = Version1 < Version2,
-    _ = dmt_client_cache:update(),
     #'Snapshot'{version = Version2} = dmt_client:checkout(),
     Object = dmt_client:checkout_object(Ref),
     #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref).
