@@ -27,6 +27,9 @@
 -define(DEFAULT_INTERVAL, 5000).
 -define(DEFAULT_LIMIT, 10).
 -define(DEFAULT_CALL_TIMEOUT, 10000).
+-define(DEFAULT_MAX_ELEMENTS, 20).
+%% 50Mb by default
+-define(DEFAULT_MAX_MEMORY, 52428800).
 
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
@@ -68,7 +71,9 @@
 -type woody_error() :: {woody_error, woody_error:system_error()}.
 
 -type from() :: {pid(), term()}.
--type fetch_result() :: {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error()}.
+-type fetch_result() ::
+    {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error() | {already_fetched, dmt_client:vsn()}}.
+
 -type dispatch_fun() :: fun((from(), fetch_result()) -> any()).
 -type waiters() :: #{
     dmt_client:ref() => [{from() | undefined, dispatch_fun()}]
@@ -76,8 +81,14 @@
 
 -record(state, {
     timer = undefined :: undefined | reference(),
-    waiters = #{} :: waiters()
+    waiters = #{} :: waiters(),
+    config = #{} :: cache_config()
 }).
+
+-type cache_config() :: #{
+    max_snapshots => non_neg_integer(),
+    max_memory => non_neg_integer()
+}.
 
 -type state() :: #state{}.
 
@@ -92,7 +103,7 @@ start_link() ->
 get(Version, Opts) ->
     case ensure_version(Version, Opts) of
         {ok, Version} ->
-            do_get(Version);
+            get_cached_snapshot(Version);
         {error, _} = Error ->
             Error
     end.
@@ -123,28 +134,36 @@ fold_objects(Version, Folder, Acc, Opts) ->
 
 -spec get_last_version() -> dmt_client:vsn() | no_return().
 get_last_version() ->
-    case do_get_last_version() of
-        {ok, Version} ->
+    UseCached = genlib_app:env(dmt_client, use_cached_last_version, true),
+    Result = last_version_in_cache(),
+    case {Result, UseCached} of
+        {{ok, Version}, true} ->
             Version;
-        {error, version_not_found} ->
-            case update() of
-                {ok, Version} ->
-                    Version;
-                {error, Error} ->
-                    erlang:error(Error)
-            end
+        {{error, version_not_found}, _} ->
+            try_update();
+        {_, false} ->
+            try_update()
     end.
 
 -spec update() -> {ok, dmt_client:vsn()} | {error, woody_error()}.
 update() ->
     call(update).
 
+try_update() ->
+    case update() of
+        {ok, Version} ->
+            Version;
+        {error, Error} ->
+            erlang:error(Error)
+    end.
+
 %%% gen_server callbacks
 
 -spec init(_) -> {ok, state(), 0}.
 init(_) ->
     ok = create_tables(),
-    {ok, #state{}, 0}.
+    State = #state{config = build_config()},
+    {ok, State, 0}.
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
 handle_call({fetch_version, Version, Opts}, From, State) ->
@@ -164,7 +183,7 @@ handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
     _ = [DispatchFun(From, Result) || {From, DispatchFun} <- maps:get(Reference, Waiters, [])],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
 handle_cast(cleanup, State) ->
-    cleanup(),
+    cleanup(State),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -190,6 +209,17 @@ create_tables() ->
     ?TABLE = ets:new(?TABLE, ?meta_table_opts),
     ok.
 
+build_config() ->
+    CacheLimits = genlib_app:env(dmt_client, max_cache_size, #{}),
+    MaxElements = genlib_map:get(elements, CacheLimits, ?DEFAULT_MAX_ELEMENTS),
+    true = 0 =< MaxElements,
+    MaxMemory = genlib_map:get(memory, CacheLimits, ?DEFAULT_MAX_MEMORY),
+    true = 0 =< MaxMemory,
+    #{
+        max_memory => MaxMemory,
+        max_snapshots => MaxElements
+    }.
+
 -spec call(term()) -> term().
 call(Msg) ->
     DefTimeout = application:get_env(dmt_client, cache_server_call_timeout, ?DEFAULT_CALL_TIMEOUT),
@@ -214,8 +244,8 @@ ensure_version(Version, Opts) ->
         false -> call({fetch_version, Version, Opts})
     end.
 
--spec do_get(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
-do_get(Version) ->
+-spec get_cached_snapshot(dmt_client:vsn()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
+get_cached_snapshot(Version) ->
     case fetch_snap(Version) of
         {ok, Snap} ->
             build_snapshot(Snap);
@@ -352,6 +382,8 @@ schedule_fetch(Reference, Opts) ->
                     {ok, Snapshot} ->
                         put_snapshot(Snapshot),
                         {ok, Snapshot#'Snapshot'.version};
+                    {error, {already_fetched, Version}} ->
+                        {ok, Version};
                     {error, _} = Error ->
                         Error
                 end,
@@ -363,8 +395,7 @@ schedule_fetch(Reference, Opts) ->
 -spec fetch(dmt_client:ref(), dmt_client:opts()) -> fetch_result().
 fetch(Reference, Opts) ->
     try
-        Snapshot = do_fetch(Reference, Opts),
-        {ok, Snapshot}
+        do_fetch(Reference, Opts)
     catch
         throw:#'VersionNotFound'{} ->
             {error, version_not_found};
@@ -372,25 +403,42 @@ fetch(Reference, Opts) ->
             {error, Error}
     end.
 
--spec do_fetch(dmt_client:ref(), dmt_client:opts()) -> dmt_client:snapshot() | no_return().
+-spec do_fetch(dmt_client:ref(), dmt_client:opts()) ->
+    {ok, dmt_client:snapshot()}
+    | {error, {already_fetched, dmt_client:vsn()}}
+    | no_return().
 do_fetch({head, #'Head'{}}, Opts) ->
-    case latest_snapshot() of
-        {ok, OldHead} ->
-            Limit = genlib_app:env(dmt_client, cache_update_pull_limit, ?DEFAULT_LIMIT),
-            update_head(OldHead, Limit, Opts);
+    case last_version_in_cache() of
+        {ok, OldVersion} ->
+            case new_commits_exist(OldVersion, Opts) of
+                true ->
+                    {ok, Head} = get_cached_snapshot(OldVersion),
+                    Limit = genlib_app:env(dmt_client, cache_update_pull_limit, ?DEFAULT_LIMIT),
+                    {ok, update_head(Head, Limit, Opts)};
+                %% Cached version doesn't fall behind upstream
+                false ->
+                    {error, {already_fetched, OldVersion}}
+            end;
         {error, version_not_found} ->
-            dmt_client_backend:checkout({head, #'Head'{}}, Opts)
+            {ok, dmt_client_backend:checkout({head, #'Head'{}}, Opts)}
     end;
 do_fetch(Reference, Opts) ->
-    dmt_client_backend:checkout(Reference, Opts).
+    {ok, dmt_client_backend:checkout(Reference, Opts)}.
+
+new_commits_exist(OldVersion, Opts) ->
+    History = dmt_client_backend:pull_range(OldVersion, _PullLimit = 1, Opts),
+    map_size(History) > 0.
 
 update_head(Head, PullLimit, Opts) ->
     FreshHistory = dmt_client_backend:pull_range(Head#'Snapshot'.version, PullLimit, Opts),
     {ok, NewHead} = dmt_history:head(FreshHistory, Head),
+
     %% Received history is smaller then PullLimit => reached the top of changes
     case map_size(FreshHistory) < PullLimit of
-        true -> NewHead;
-        false -> update_head(NewHead, PullLimit, Opts)
+        true ->
+            NewHead;
+        false ->
+            update_head(NewHead, PullLimit, Opts)
     end.
 
 -spec dispatch_reply(from() | undefined, fetch_result()) -> _.
@@ -417,17 +465,8 @@ build_snapshot(#snap{vsn = Version, tid = TID}) ->
             {error, version_not_found}
     end.
 
--spec latest_snapshot() -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
-latest_snapshot() ->
-    case do_get_last_version() of
-        {ok, Version} ->
-            do_get(Version);
-        {error, version_not_found} = Error ->
-            Error
-    end.
-
--spec do_get_last_version() -> {ok, dmt_client:vsn()} | {error, version_not_found}.
-do_get_last_version() ->
+-spec last_version_in_cache() -> {ok, dmt_client:vsn()} | {error, version_not_found}.
+last_version_in_cache() ->
     case ets:last(?TABLE) of
         '$end_of_table' ->
             {error, version_not_found};
@@ -447,51 +486,45 @@ start_timer(State = #state{timer = undefined}) ->
     Interval = genlib_app:env(dmt_client, cache_update_interval, ?DEFAULT_INTERVAL),
     State#state{timer = erlang:send_after(Interval, self(), timeout)}.
 
--spec cleanup() -> ok.
-cleanup() ->
+-spec cleanup(state()) -> ok.
+cleanup(#state{config = Config}) ->
     Snaps = get_all_snaps(),
     Sorted = lists:keysort(#snap.last_access, Snaps),
-    {ok, HeadVersion} = do_get_last_version(),
-    cleanup(Sorted, HeadVersion).
+    {ok, HeadVersion} = last_version_in_cache(),
+    cleanup(Sorted, Config, HeadVersion).
 
--spec cleanup([snap()], dmt_client:vsn()) -> ok.
-cleanup([], _HeadVersion) ->
+-spec cleanup([snap()], cache_config(), dmt_client:vsn()) -> ok.
+cleanup([], _Config, _HeadVersion) ->
     ok;
-cleanup(Snaps, HeadVersion) ->
-    {Elements, Memory} = get_cache_size(),
-    CacheLimits = genlib_app:env(dmt_client, max_cache_size, #{}),
-    MaxElements = genlib_map:get(elements, CacheLimits, 20),
-    % 50Mb by default
-    MaxMemory = genlib_map:get(memory, CacheLimits, 52428800),
-    case Elements > MaxElements orelse (Elements > 1 andalso Memory > MaxMemory) of
+cleanup(Snaps, Config, HeadVersion) ->
+    SnapshotCount = get_snapshot_count(),
+    MemoryUsage = get_snapshot_memory_usage(),
+    MaxSnapshots = maps:get(max_snapshots, Config),
+    MaxMemory = maps:get(max_memory, Config),
+    case SnapshotCount > MaxSnapshots orelse (SnapshotCount > 1 andalso MemoryUsage > MaxMemory) of
         true ->
             Tail = remove_earliest(Snaps, HeadVersion),
-            cleanup(Tail, HeadVersion);
+            cleanup(Tail, Config, HeadVersion);
         false ->
             ok
     end.
 
--spec get_cache_size() -> {non_neg_integer(), non_neg_integer()}.
-get_cache_size() ->
+-spec get_snapshot_count() -> non_neg_integer().
+get_snapshot_count() ->
+    ets:info(?TABLE, size).
+
+-spec get_snapshot_memory_usage() -> non_neg_integer().
+get_snapshot_memory_usage() ->
     WordSize = erlang:system_info(wordsize),
-    Info = ets:info(?TABLE),
-    Words = get_snapshot_tables_size(),
-    {proplists:get_value(size, Info), WordSize * Words}.
-
--spec get_snapshot_tables_size() -> non_neg_integer().
-get_snapshot_tables_size() ->
-    ets:foldl(
-        fun(#snap{tid = TID}, Words) ->
-            Words + ets_memory(TID)
-        end,
-        0,
-        ?TABLE
-    ).
-
--spec ets_memory(ets:tid()) -> non_neg_integer().
-ets_memory(TID) ->
-    Info = ets:info(TID),
-    proplists:get_value(memory, Info).
+    WordCount =
+        ets:foldl(
+            fun(#snap{tid = TID}, Words) ->
+                Words + ets:info(TID, memory)
+            end,
+            0,
+            ?TABLE
+        ),
+    WordSize * WordCount.
 
 -spec remove_earliest([snap()], dmt_client:vsn()) -> [snap()].
 remove_earliest([#snap{vsn = HeadVersion} | Tail], HeadVersion) ->
@@ -545,6 +578,9 @@ set_cache_limits(Elements) ->
 
 set_cache_limits(Elements, Memory) ->
     application:set_env(dmt_client, max_cache_size, #{elements => Elements, memory => Memory}).
+
+cleanup() ->
+    cleanup(#state{config = build_config()}).
 
 -spec test_cleanup() -> _.
 test_cleanup() ->

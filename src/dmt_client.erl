@@ -394,4 +394,4 @@ updating_ref_to_version(Ref) ->
 ref_to_version(Version) when is_integer(Version) ->
     Version;
 ref_to_version(latest) ->
-    dmt_client_cache:get_last_version().
+    get_last_version().
