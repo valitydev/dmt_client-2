@@ -7,6 +7,8 @@
 -behaviour(application).
 
 %% API
+-export([object/1]).
+-export([object/2]).
 -export([checkout/0]).
 -export([checkout/1]).
 -export([checkout/2]).
@@ -65,6 +67,7 @@
 -export_type([object_type/0]).
 -export_type([object_filter/0]).
 -export_type([object_folder/1]).
+-export_type([object_data/0]).
 -export_type([domain_object/0]).
 -export_type([domain/0]).
 -export_type([history/0]).
@@ -82,6 +85,7 @@
 -type object_type() :: atom().
 -type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
 -type object_folder(Acc) :: fun((object_type(), domain_object(), Acc) -> Acc).
+-type object_data() :: any().
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
 %% HACK: this is type required for checkout_objects_by_type:
 %% domain_object is any object from union, tagged with it's name
@@ -96,6 +100,20 @@
 }.
 
 %%% API
+
+-spec object(object_ref()) -> {ok, object_data()} | {error, notfound}.
+object(ObjectRef) ->
+    object(get_last_version(), ObjectRef).
+
+-spec object(version(), object_ref()) -> {ok, object_data()} | {error, notfound}.
+object(Version, Ref = {Type, ObjectRef}) ->
+    try checkout_object(Version, Ref) of
+        {Type, {_RecordName, ObjectRef, ObjectData}} ->
+            {ok, ObjectData}
+    catch
+        #'ObjectNotFound'{} ->
+            {error, notfound}
+    end.
 
 -spec checkout() -> snapshot() | no_return().
 checkout() ->
