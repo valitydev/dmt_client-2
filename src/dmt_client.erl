@@ -7,8 +7,8 @@
 -behaviour(application).
 
 %% API
--export([try_checkout_object/1]).
--export([try_checkout_object/2]).
+-export([try_checkout_data/1]).
+-export([try_checkout_data/2]).
 -export([checkout/0]).
 -export([checkout/1]).
 -export([checkout/2]).
@@ -101,14 +101,15 @@
 
 %%% API
 
--spec try_checkout_object(object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
-try_checkout_object(ObjectRef) ->
-    try_checkout_object(get_last_version(), ObjectRef).
+-spec try_checkout_data(object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+try_checkout_data(ObjectRef) ->
+    try_checkout_data(get_last_version(), ObjectRef).
 
--spec try_checkout_object(version(), object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
-try_checkout_object(Version, Ref) ->
+-spec try_checkout_data(version(), object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+try_checkout_data(Version, Ref) ->
     case do_checkout_object(Version, Ref, #{}) of
         {ok, {_Type, Object}} ->
+            %% HACK: attempt not to be tied to a specific composition of domain object tuple
             {ok, erlang:element(3, Object)};
         {error, object_not_found} = NotFound ->
             NotFound;
