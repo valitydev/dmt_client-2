@@ -7,8 +7,8 @@
 -behaviour(application).
 
 %% API
--export([object/1]).
--export([object/2]).
+-export([try_checkout_object/1]).
+-export([try_checkout_object/2]).
 -export([checkout/0]).
 -export([checkout/1]).
 -export([checkout/2]).
@@ -101,18 +101,19 @@
 
 %%% API
 
--spec object(object_ref()) -> {ok, object_data()} | {error, notfound}.
-object(ObjectRef) ->
-    object(get_last_version(), ObjectRef).
+-spec try_checkout_object(object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+try_checkout_object(ObjectRef) ->
+    try_checkout_object(get_last_version(), ObjectRef).
 
--spec object(version(), object_ref()) -> {ok, object_data()} | {error, notfound}.
-object(Version, Ref = {Type, ObjectRef}) ->
-    try checkout_object(Version, Ref) of
-        {Type, {_RecordName, ObjectRef, ObjectData}} ->
-            {ok, ObjectData}
-    catch
-        #'ObjectNotFound'{} ->
-            {error, notfound}
+-spec try_checkout_object(version(), object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+try_checkout_object(Version, Ref) ->
+    case do_checkout_object(Version, Ref, #{}) of
+        {ok, {_Type, Object}} ->
+            {ok, erlang:element(3, Object)};
+        {error, object_not_found} = NotFound ->
+            NotFound;
+        {error, Error} ->
+            erlang:error(Error)
     end.
 
 -spec checkout() -> snapshot() | no_return().
