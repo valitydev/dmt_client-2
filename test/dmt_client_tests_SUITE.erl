@@ -1,6 +1,5 @@
 -module(dmt_client_tests_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
 -export([all/0]).
@@ -11,7 +10,7 @@
 -export([inserts_updates_upserts_and_removes/1]).
 -export([cached_latest/1]).
 
--include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 
 %%
 %% tests descriptions
@@ -61,13 +60,16 @@ end_per_suite(C) ->
 insert_and_all_checkouts(_C) ->
     Object = dmt_client_fixtures:fixture_category_object(1, <<"InsertFixture">>),
     Ref = dmt_client_fixtures:fixture_category_ref(1),
-    #'ObjectNotFound'{} = (catch dmt_client:checkout_object(Ref)),
-    #'Snapshot'{version = Version1} = dmt_client:checkout(),
+    #domain_conf_ObjectNotFound{} = (catch dmt_client:checkout_object(Ref)),
+    #domain_conf_Snapshot{version = Version1} = dmt_client:checkout(),
     Version2 = dmt_client:insert(Object),
     true = Version1 < Version2,
-    #'Snapshot'{version = Version2} = dmt_client:checkout(),
+    #domain_conf_Snapshot{version = Version2} = dmt_client:checkout(),
     Object = dmt_client:checkout_object(Ref),
-    #'VersionedObject'{version = Version2, object = Object} = dmt_client:checkout_versioned_object(latest, Ref).
+    #domain_conf_VersionedObject{
+        version = Version2,
+        object = Object
+    } = dmt_client:checkout_versioned_object(latest, Ref).
 
 -spec inserts_updates_upserts_and_removes(term()) -> _.
 inserts_updates_upserts_and_removes(_C) ->
@@ -84,7 +86,10 @@ inserts_updates_upserts_and_removes(_C) ->
     Cat1 = dmt_client:checkout_object(Cat1Ref),
 
     Version3 = dmt_client:update(Cat1Modified),
-    #'VersionedObject'{version = Version3, object = Cat1Modified} = dmt_client:checkout_versioned_object(Cat1Ref),
+    #domain_conf_VersionedObject{
+        version = Version3,
+        object = Cat1Modified
+    } = dmt_client:checkout_versioned_object(Cat1Ref),
 
     Version4 = dmt_client:upsert([Cat1ModifiedAgain, Cat2]),
     Cat1ModifiedAgain = dmt_client:checkout_object(Cat1Ref),
@@ -92,7 +97,7 @@ inserts_updates_upserts_and_removes(_C) ->
 
     Version5 = dmt_client:remove(Cat1ModifiedAgain),
     ?assertThrow(
-        #'ObjectNotFound'{},
+        #domain_conf_ObjectNotFound{},
         dmt_client:checkout_object(Cat1Ref)
     ),
     Cat2 = dmt_client:checkout_object(Cat2Ref),
@@ -111,7 +116,7 @@ inserts_updates_upserts_and_removes(_C) ->
 -spec cached_latest(term()) -> _.
 cached_latest(_C) ->
     Object = dmt_client_fixtures:fixture_category_object(100, <<"UpstreamLatest">>),
-    Commit = #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]},
+    Commit = #domain_conf_Commit{ops = [{insert, #domain_conf_InsertOp{object = Object}}]},
 
     %% Get around library to prevent cache update
     Version = dmt_client:get_last_version(),
