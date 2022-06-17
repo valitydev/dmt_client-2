@@ -34,7 +34,7 @@
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--define(meta_table_opts, [
+-define(META_TABLE_OPTS, [
     named_table,
     ordered_set,
     public,
@@ -43,7 +43,7 @@
     {keypos, #snap.vsn}
 ]).
 
--define(snapshot_table_opts, [
+-define(SNAPSHOT_TABLE_OPTS, [
     ordered_set,
     protected,
     {read_concurrency, true},
@@ -206,7 +206,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec create_tables() -> ok.
 create_tables() ->
-    ?TABLE = ets:new(?TABLE, ?meta_table_opts),
+    ?TABLE = ets:new(?TABLE, ?META_TABLE_OPTS),
     ok.
 
 build_config() ->
@@ -310,7 +310,7 @@ put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
         {ok, _Snap} ->
             ok;
         {error, version_not_found} ->
-            TID = ets:new(?MODULE, [{heir, whereis(?SERVER), ok}] ++ ?snapshot_table_opts),
+            TID = ets:new(?MODULE, [{heir, whereis(?SERVER), ok}] ++ ?SNAPSHOT_TABLE_OPTS),
             true = put_domain_to_table(TID, Domain),
             Snap = #snap{
                 vsn = Version,
@@ -627,7 +627,7 @@ test_get_object_by_type() ->
     set_cache_limits(1),
     Version = 6,
     {_, Cat1} = dmt_client_fixtures:fixture(category),
-    {_, Cat2} = dmt_client_fixtures:fixture(category_2),
+    {_, Cat2} = dmt_client_fixtures:fixture(category2),
 
     Domain = dmt_client_fixtures:domain_with_all_fixtures(),
 

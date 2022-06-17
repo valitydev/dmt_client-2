@@ -18,7 +18,7 @@ domain_with_all_fixtures() ->
     domain_insert(
         [
             fixture(category),
-            fixture(category_2),
+            fixture(category2),
             fixture(currency)
         ]
     ).
@@ -46,7 +46,7 @@ fixture(ID) ->
         ID,
         #{
             category => fixture_category_object(1, <<"cat">>),
-            category_2 => fixture_category_object(2, <<"dog">>),
+            category2 => fixture_category_object(2, <<"dog">>),
             currency => fixture_currency_object(<<"USD">>, #{
                 name => <<"dog">>,
                 numeric_code => 840,

@@ -21,14 +21,14 @@
 
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
--define(notfound_version, 1).
--define(unavailable_version, 2).
--define(existing_version, 42).
+-define(NOTFOUND_VERSION, 1).
+-define(UNAVAILABLE_VERSION, 2).
+-define(EXISTING_VERSION, 42).
 
 -type config() :: [tuple()].
 -type testcase_or_group() :: atom() | {group, atom()}.
 
--define(tests_count, 100).
+-define(TESTS_COUNT, 100).
 
 %%% Common test callbacks
 
@@ -48,15 +48,15 @@ groups() ->
             {group, object_not_found},
             {group, mixed}
         ]},
-        {get_snapshot_success, [parallel], lists:duplicate(?tests_count, get_snapshot_success)},
-        {snapshot_not_found, [parallel], lists:duplicate(?tests_count, snapshot_not_found)},
-        {woody_error, [parallel], lists:duplicate(?tests_count, woody_error)},
-        {object_not_found, [parallel], lists:duplicate(?tests_count, object_not_found)},
+        {get_snapshot_success, [parallel], lists:duplicate(?TESTS_COUNT, get_snapshot_success)},
+        {snapshot_not_found, [parallel], lists:duplicate(?TESTS_COUNT, snapshot_not_found)},
+        {woody_error, [parallel], lists:duplicate(?TESTS_COUNT, woody_error)},
+        {object_not_found, [parallel], lists:duplicate(?TESTS_COUNT, object_not_found)},
         {mixed, [parallel, shuffle],
-            lists:duplicate(?tests_count, get_snapshot_success) ++
-                lists:duplicate(?tests_count, snapshot_not_found) ++
-                lists:duplicate(?tests_count, woody_error) ++
-                lists:duplicate(?tests_count, object_not_found)}
+            lists:duplicate(?TESTS_COUNT, get_snapshot_success) ++
+                lists:duplicate(?TESTS_COUNT, snapshot_not_found) ++
+                lists:duplicate(?TESTS_COUNT, woody_error) ++
+                lists:duplicate(?TESTS_COUNT, object_not_found)}
     ].
 
 -spec init_per_suite(config()) -> config().
@@ -88,16 +88,16 @@ commit(Version, _Commit, _Opts) ->
     Version.
 
 -spec checkout(dmt_client:ref(), dmt_client:opts()) -> dmt_client:snapshot() | no_return().
-checkout({version, ?notfound_version}, _Opts) ->
+checkout({version, ?NOTFOUND_VERSION}, _Opts) ->
     erlang:throw(#'VersionNotFound'{});
-checkout({version, ?unavailable_version}, _Opts) ->
+checkout({version, ?UNAVAILABLE_VERSION}, _Opts) ->
     woody_error:raise(system, {external, resource_unavailable, <<"test">>});
-checkout({version, ?existing_version}, _Opts) ->
+checkout({version, ?EXISTING_VERSION}, _Opts) ->
     timer:sleep(5000),
-    #'Snapshot'{version = ?existing_version, domain = dmt_domain:new()};
+    #'Snapshot'{version = ?EXISTING_VERSION, domain = dmt_domain:new()};
 checkout({head, #'Head'{}}, _Opts) ->
     timer:sleep(5000),
-    #'Snapshot'{version = ?existing_version, domain = dmt_domain:new()}.
+    #'Snapshot'{version = ?EXISTING_VERSION, domain = dmt_domain:new()}.
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().
@@ -113,18 +113,18 @@ pull_range(_Version, _Limit, _Opts) ->
 
 -spec get_snapshot_success(config()) -> any().
 get_snapshot_success(_C) ->
-    {ok, #'Snapshot'{}} = dmt_client_cache:get(?existing_version, #{}).
+    {ok, #'Snapshot'{}} = dmt_client_cache:get(?EXISTING_VERSION, #{}).
 
 -spec snapshot_not_found(config()) -> any().
 snapshot_not_found(_C) ->
-    {error, version_not_found} = dmt_client_cache:get(?notfound_version, #{}).
+    {error, version_not_found} = dmt_client_cache:get(?NOTFOUND_VERSION, #{}).
 
 -spec woody_error(config()) -> any().
 woody_error(_C) ->
-    {error, {woody_error, _}} = dmt_client_cache:get(?unavailable_version, #{}).
+    {error, {woody_error, _}} = dmt_client_cache:get(?UNAVAILABLE_VERSION, #{}).
 
 -spec object_not_found(config()) -> any().
 object_not_found(_C) ->
     Ref = {category, #'domain_CategoryRef'{id = 1}},
-    {error, version_not_found} = dmt_client_cache:get_object(?notfound_version, Ref, #{}),
-    {error, object_not_found} = dmt_client_cache:get_object(?existing_version, Ref, #{}).
+    {error, version_not_found} = dmt_client_cache:get_object(?NOTFOUND_VERSION, Ref, #{}),
+    {error, object_not_found} = dmt_client_cache:get_object(?EXISTING_VERSION, Ref, #{}).
