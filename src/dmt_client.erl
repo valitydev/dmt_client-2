@@ -75,12 +75,12 @@
 
 -include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 
--type ref() :: dmsl_domain_config_thrift:'Reference'().
--type vsn() :: dmsl_domain_config_thrift:'Version'().
+-type ref() :: dmsl_domain_conf_thrift:'Reference'().
+-type vsn() :: dmsl_domain_conf_thrift:'Version'().
 -type version() :: vsn() | latest.
--type limit() :: dmsl_domain_config_thrift:'Limit'().
--type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
--type commit() :: dmsl_domain_config_thrift:'Commit'().
+-type limit() :: dmsl_domain_conf_thrift:'Limit'().
+-type snapshot() :: dmsl_domain_conf_thrift:'Snapshot'().
+-type commit() :: dmsl_domain_conf_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type object_type() :: atom().
 -type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
@@ -90,9 +90,9 @@
 %% domain_object is any object from union, tagged with it's name
 %% yet there's no way to extract typespecs for untagged objects
 -type untagged_domain_object() :: tuple().
--type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
+-type versioned_object() :: dmsl_domain_conf_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
--type history() :: dmsl_domain_config_thrift:'History'().
+-type history() :: dmsl_domain_conf_thrift:'History'().
 -type opts() :: #{
     transport_opts => woody_client_thrift_http_transport:transport_options(),
     woody_context => woody_context:ctx()
