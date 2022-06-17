@@ -9,6 +9,9 @@ services:
       args:
         OTP_VERSION: $OTP_VERSION
         THRIFT_VERSION: $THRIFT_VERSION
+    depends_on:
+      dominant:
+        condition: service_healthy
     volumes:
       - .:$PWD
     working_dir: $PWD
