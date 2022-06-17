@@ -117,7 +117,7 @@ get_object(Version, ObjectRef, Opts) ->
     end.
 
 -spec get_objects_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:opts()) ->
-    {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
+    {ok, [dmt_client:untagged_domain_object()]} | {error, version_not_found | woody_error()}.
 get_objects_by_type(Version, ObjectType, Opts) ->
     case ensure_version(Version, Opts) of
         {ok, Version} -> do_get_objects_by_type(Version, ObjectType);
@@ -553,10 +553,12 @@ timestamp() ->
 
 -include_lib("eunit/include/eunit.hrl").
 
+-type testcase() :: function() | {_Loc, function()} | [testcase()] | {setup, function(), testcase()}.
+
 % dirty hack for warn_missing_spec
 -spec test() -> any().
 
--spec all_test_() -> ok.
+-spec all_test_() -> testcase().
 
 all_test_() ->
     {setup,

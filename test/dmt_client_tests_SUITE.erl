@@ -59,8 +59,8 @@ end_per_suite(C) ->
 %% tests
 -spec insert_and_all_checkouts(term()) -> _.
 insert_and_all_checkouts(_C) ->
-    Object = dmt_client_fixtures:fixture_domain_object(1, <<"InsertFixture">>),
-    Ref = dmt_client_fixtures:fixture_object_ref(1),
+    Object = dmt_client_fixtures:fixture_category_object(1, <<"InsertFixture">>),
+    Ref = dmt_client_fixtures:fixture_category_ref(1),
     #'ObjectNotFound'{} = (catch dmt_client:checkout_object(Ref)),
     #'Snapshot'{version = Version1} = dmt_client:checkout(),
     Version2 = dmt_client:insert(Object),
@@ -110,7 +110,7 @@ inserts_updates_upserts_and_removes(_C) ->
 
 -spec cached_latest(term()) -> _.
 cached_latest(_C) ->
-    Object = dmt_client_fixtures:fixture_domain_object(100, <<"UpstreamLatest">>),
+    Object = dmt_client_fixtures:fixture_category_object(100, <<"UpstreamLatest">>),
     Commit = #'Commit'{ops = [{insert, #'InsertOp'{object = Object}}]},
 
     %% Get around library to prevent cache update

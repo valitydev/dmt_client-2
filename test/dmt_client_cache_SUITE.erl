@@ -100,7 +100,7 @@ checkout({head, #'Head'{}}, _Opts) ->
     #'Snapshot'{version = ?EXISTING_VERSION, domain = dmt_domain:new()}.
 
 -spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
+    no_return().
 checkout_object(_Reference, _ObjectReference, _Opts) ->
     erlang:throw(#'ObjectNotFound'{}).
 

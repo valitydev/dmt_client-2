@@ -67,8 +67,8 @@
 -export_type([object_type/0]).
 -export_type([object_filter/0]).
 -export_type([object_folder/1]).
--export_type([object_data/0]).
 -export_type([domain_object/0]).
+-export_type([untagged_domain_object/0]).
 -export_type([domain/0]).
 -export_type([history/0]).
 -export_type([opts/0]).
@@ -85,7 +85,6 @@
 -type object_type() :: atom().
 -type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
 -type object_folder(Acc) :: fun((object_type(), domain_object(), Acc) -> Acc).
--type object_data() :: any().
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
 %% HACK: this is type required for checkout_objects_by_type:
 %% domain_object is any object from union, tagged with it's name
@@ -101,11 +100,13 @@
 
 %%% API
 
--spec try_checkout_data(object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+-spec try_checkout_data(object_ref()) ->
+    {ok, untagged_domain_object()} | {error, object_not_found} | no_return().
 try_checkout_data(ObjectRef) ->
     try_checkout_data(get_last_version(), ObjectRef).
 
--spec try_checkout_data(version(), object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+-spec try_checkout_data(version(), object_ref()) ->
+    {ok, untagged_domain_object()} | {error, object_not_found} | no_return().
 try_checkout_data(Version, Ref) ->
     case do_checkout_object(Version, Ref, #{}) of
         {ok, {_Type, Object}} ->
