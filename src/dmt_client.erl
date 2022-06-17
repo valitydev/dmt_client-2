@@ -267,7 +267,7 @@ insert(Reference, Objects, Opts) ->
             {insert, #'InsertOp'{
                 object = Object
             }}
-            || Object <- Objects
+         || Object <- Objects
         ]
     },
     commit(Reference, Commit, Opts).
@@ -291,8 +291,8 @@ update(Reference, NewObjects, Opts) ->
                 old_object = OldObject,
                 new_object = NewObject
             }}
-            || NewObject = {Tag, {_ObjectName, Ref, _Data}} <- NewObjects,
-               OldObject <- [checkout_object(Version, {Tag, Ref}, Opts)]
+         || NewObject = {Tag, {_ObjectName, Ref, _Data}} <- NewObjects,
+            OldObject <- [checkout_object(Version, {Tag, Ref}, Opts)]
         ]
     },
     %% Don't need pre-commit update: done in the beginning
@@ -358,7 +358,7 @@ remove(Reference, Objects, Opts) ->
             {remove, #'RemoveOp'{
                 object = Object
             }}
-            || Object <- Objects
+         || Object <- Objects
         ]
     },
     commit(Reference, Commit, Opts).
