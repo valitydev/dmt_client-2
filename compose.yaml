@@ -1,0 +1,39 @@
+version: '3'
+services:
+
+  testrunner:
+    image: $DEV_IMAGE_TAG
+    build:
+      dockerfile: Dockerfile.dev
+      context: .
+      args:
+        OTP_VERSION: $OTP_VERSION
+        THRIFT_VERSION: $THRIFT_VERSION
+    volumes:
+      - .:$PWD
+    working_dir: $PWD
+    command: /sbin/init
+
+  dominant:
+    image: ghcr.io/valitydev/dominant:sha-eb1cccb
+    command: /opt/dominant/bin/dominant foreground
+    depends_on:
+      machinegun:
+        condition: service_healthy
+    healthcheck:
+      test: "/opt/dominant/bin/dominant ping"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  machinegun:
+    image: ghcr.io/valitydev/machinegun:sha-51546f7
+    command: /opt/machinegun/bin/machinegun foreground
+    volumes:
+      - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
+      - ./test/machinegun/cookie:/opt/machinegun/etc/cookie
+    healthcheck:
+      test: "/opt/machinegun/bin/machinegun ping"
+      interval: 5s
+      timeout: 1s
+      retries: 12

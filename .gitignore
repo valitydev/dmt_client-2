@@ -1,16 +1,13 @@
-# general
-log
+# Build artifacts
 /_build/
-/.rebar3/
-/ebin/
-*~
+*.o
+*.beam
+*.plt
+
+# Run artifacts
 erl_crash.dump
-.tags*
-*.sublime-workspace
-.DS_Store
+log
 
-# builtils
-docker-compose.yml
-
-src/dmt_client_*_thrift.erl
-include/dmt_client_*_thrift.hrl
+# make stuff
+/.image.*
+Makefile.env
