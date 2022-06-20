@@ -63,9 +63,9 @@ get_service_modname(ServiceName) ->
     {get_service_module(ServiceName), ServiceName}.
 
 get_service_module('Repository') ->
-    dmsl_domain_config_thrift;
+    dmsl_domain_conf_thrift;
 get_service_module('RepositoryClient') ->
-    dmsl_domain_config_thrift.
+    dmsl_domain_conf_thrift.
 
 get_event_handlers() ->
     genlib_app:env(dmt_client, woody_event_handlers, []).

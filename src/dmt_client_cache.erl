@@ -31,10 +31,10 @@
 %% 50Mb by default
 -define(DEFAULT_MAX_MEMORY, 52428800).
 
--include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 -include_lib("stdlib/include/ms_transform.hrl").
 
--define(meta_table_opts, [
+-define(META_TABLE_OPTS, [
     named_table,
     ordered_set,
     public,
@@ -43,7 +43,7 @@
     {keypos, #snap.vsn}
 ]).
 
--define(snapshot_table_opts, [
+-define(SNAPSHOT_TABLE_OPTS, [
     ordered_set,
     protected,
     {read_concurrency, true},
@@ -117,7 +117,7 @@ get_object(Version, ObjectRef, Opts) ->
     end.
 
 -spec get_objects_by_type(dmt_client:vsn(), dmt_client:object_type(), dmt_client:opts()) ->
-    {ok, [dmt_client:domain_object()]} | {error, version_not_found | woody_error()}.
+    {ok, [dmt_client:untagged_domain_object()]} | {error, version_not_found | woody_error()}.
 get_objects_by_type(Version, ObjectType, Opts) ->
     case ensure_version(Version, Opts) of
         {ok, Version} -> do_get_objects_by_type(Version, ObjectType);
@@ -206,7 +206,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 -spec create_tables() -> ok.
 create_tables() ->
-    ?TABLE = ets:new(?TABLE, ?meta_table_opts),
+    ?TABLE = ets:new(?TABLE, ?META_TABLE_OPTS),
     ok.
 
 build_config() ->
@@ -305,12 +305,12 @@ do_fold_objects(Version, Folder, Acc) ->
     end.
 
 -spec put_snapshot(dmt_client:snapshot()) -> ok.
-put_snapshot(#'Snapshot'{version = Version, domain = Domain}) ->
+put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}) ->
     case fetch_snap(Version) of
         {ok, _Snap} ->
             ok;
         {error, version_not_found} ->
-            TID = ets:new(?MODULE, [{heir, whereis(?SERVER), ok}] ++ ?snapshot_table_opts),
+            TID = ets:new(?MODULE, [{heir, whereis(?SERVER), ok}] ++ ?SNAPSHOT_TABLE_OPTS),
             true = put_domain_to_table(TID, Domain),
             Snap = #snap{
                 vsn = Version,
@@ -354,7 +354,7 @@ get_all_snaps() ->
     ets:tab2list(?TABLE).
 
 update(From, State) ->
-    restart_timer(fetch_by_reference({head, #'Head'{}}, From, #{}, State)).
+    restart_timer(fetch_by_reference({head, #domain_conf_Head{}}, From, #{}, State)).
 
 fetch_by_reference(Reference, From, Opts, #state{waiters = Waiters} = State) ->
     DispatchFun = fun dispatch_reply/2,
@@ -381,7 +381,7 @@ schedule_fetch(Reference, Opts) ->
                 case fetch(Reference, Opts) of
                     {ok, Snapshot} ->
                         put_snapshot(Snapshot),
-                        {ok, Snapshot#'Snapshot'.version};
+                        {ok, Snapshot#domain_conf_Snapshot.version};
                     {error, {already_fetched, Version}} ->
                         {ok, Version};
                     {error, _} = Error ->
@@ -397,7 +397,7 @@ fetch(Reference, Opts) ->
     try
         do_fetch(Reference, Opts)
     catch
-        throw:#'VersionNotFound'{} ->
+        throw:#domain_conf_VersionNotFound{} ->
             {error, version_not_found};
         error:{woody_error, {_Source, _Class, _Details}} = Error ->
             {error, Error}
@@ -407,7 +407,7 @@ fetch(Reference, Opts) ->
     {ok, dmt_client:snapshot()}
     | {error, {already_fetched, dmt_client:vsn()}}
     | no_return().
-do_fetch({head, #'Head'{}}, Opts) ->
+do_fetch({head, #domain_conf_Head{}}, Opts) ->
     case last_version_in_cache() of
         {ok, OldVersion} ->
             case new_commits_exist(OldVersion, Opts) of
@@ -420,7 +420,7 @@ do_fetch({head, #'Head'{}}, Opts) ->
                     {error, {already_fetched, OldVersion}}
             end;
         {error, version_not_found} ->
-            {ok, dmt_client_backend:checkout({head, #'Head'{}}, Opts)}
+            {ok, dmt_client_backend:checkout({head, #domain_conf_Head{}}, Opts)}
     end;
 do_fetch(Reference, Opts) ->
     {ok, dmt_client_backend:checkout(Reference, Opts)}.
@@ -430,7 +430,7 @@ new_commits_exist(OldVersion, Opts) ->
     map_size(History) > 0.
 
 update_head(Head, PullLimit, Opts) ->
-    FreshHistory = dmt_client_backend:pull_range(Head#'Snapshot'.version, PullLimit, Opts),
+    FreshHistory = dmt_client_backend:pull_range(Head#domain_conf_Snapshot.version, PullLimit, Opts),
     {ok, NewHead} = dmt_history:head(FreshHistory, Head),
 
     %% Received history is smaller then PullLimit => reached the top of changes
@@ -458,7 +458,7 @@ build_snapshot(#snap{vsn = Version, tid = TID}) ->
             dmt_domain:new(),
             TID
         ),
-        {ok, #'Snapshot'{version = Version, domain = Domain}}
+        {ok, #domain_conf_Snapshot{version = Version, domain = Domain}}
     catch
         % table was deleted due to cleanup process or crash
         error:badarg ->
@@ -552,11 +552,14 @@ timestamp() ->
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+
+-type testcase() :: function() | {_Loc, function()} | [testcase()] | {setup, function(), testcase()}.
 
 % dirty hack for warn_missing_spec
 -spec test() -> any().
 
--spec all_test_() -> ok.
+-spec all_test_() -> testcase().
 
 all_test_() ->
     {setup,
@@ -585,10 +588,10 @@ cleanup() ->
 -spec test_cleanup() -> _.
 test_cleanup() ->
     set_cache_limits(2),
-    ok = put_snapshot(#'Snapshot'{version = 4, domain = dmt_domain:new()}),
-    ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
-    ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
-    ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 1, domain = dmt_domain:new()}),
     cleanup(),
     [
         #snap{vsn = 1, _ = _},
@@ -599,12 +602,12 @@ test_cleanup() ->
 test_last_access() ->
     set_cache_limits(3),
     % Tables already created in test_cleanup/0
-    ok = put_snapshot(#'Snapshot'{version = 4, domain = dmt_domain:new()}),
-    ok = put_snapshot(#'Snapshot'{version = 3, domain = dmt_domain:new()}),
-    ok = put_snapshot(#'Snapshot'{version = 2, domain = dmt_domain:new()}),
-    Ref = {category, #'domain_CategoryRef'{id = 1}},
+    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
+    Ref = {category, #domain_CategoryRef{id = 1}},
     {error, object_not_found} = get_object(3, Ref, #{}),
-    ok = put_snapshot(#'Snapshot'{version = 1, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 1, domain = dmt_domain:new()}),
     cleanup(),
     [
         #snap{vsn = 1, _ = _},
@@ -619,7 +622,7 @@ test_get_object() ->
     Cat = {_, {_, Ref, _}} = dmt_client_fixtures:fixture(category),
     Domain = dmt_client_fixtures:domain_insert(Cat),
 
-    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
     {ok, Cat} = get_object(Version, {category, Ref}, #{}).
 
 -spec test_get_object_by_type() -> _.
@@ -627,11 +630,11 @@ test_get_object_by_type() ->
     set_cache_limits(1),
     Version = 6,
     {_, Cat1} = dmt_client_fixtures:fixture(category),
-    {_, Cat2} = dmt_client_fixtures:fixture(category_2),
+    {_, Cat2} = dmt_client_fixtures:fixture(category2),
 
     Domain = dmt_client_fixtures:domain_with_all_fixtures(),
 
-    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
 
     {ok, Objects} = get_objects_by_type(Version, category, #{}),
     [Cat1, Cat2] = lists:sort(Objects).
@@ -643,7 +646,7 @@ test_fold() ->
 
     Domain = dmt_client_fixtures:domain_with_all_fixtures(),
 
-    ok = put_snapshot(#'Snapshot'{version = Version, domain = Domain}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
 
     {ok, OrdSet} = fold_objects(
         Version,

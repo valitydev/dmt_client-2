@@ -67,33 +67,32 @@
 -export_type([object_type/0]).
 -export_type([object_filter/0]).
 -export_type([object_folder/1]).
--export_type([object_data/0]).
 -export_type([domain_object/0]).
+-export_type([untagged_domain_object/0]).
 -export_type([domain/0]).
 -export_type([history/0]).
 -export_type([opts/0]).
 
--include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 
--type ref() :: dmsl_domain_config_thrift:'Reference'().
--type vsn() :: dmsl_domain_config_thrift:'Version'().
+-type ref() :: dmsl_domain_conf_thrift:'Reference'().
+-type vsn() :: dmsl_domain_conf_thrift:'Version'().
 -type version() :: vsn() | latest.
--type limit() :: dmsl_domain_config_thrift:'Limit'().
--type snapshot() :: dmsl_domain_config_thrift:'Snapshot'().
--type commit() :: dmsl_domain_config_thrift:'Commit'().
+-type limit() :: dmsl_domain_conf_thrift:'Limit'().
+-type snapshot() :: dmsl_domain_conf_thrift:'Snapshot'().
+-type commit() :: dmsl_domain_conf_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type object_type() :: atom().
 -type object_filter() :: fun((object_type(), domain_object()) -> boolean()).
 -type object_folder(Acc) :: fun((object_type(), domain_object(), Acc) -> Acc).
--type object_data() :: any().
 -type domain_object() :: dmsl_domain_thrift:'DomainObject'().
 %% HACK: this is type required for checkout_objects_by_type:
 %% domain_object is any object from union, tagged with it's name
 %% yet there's no way to extract typespecs for untagged objects
 -type untagged_domain_object() :: tuple().
--type versioned_object() :: dmsl_domain_config_thrift:'VersionedObject'().
+-type versioned_object() :: dmsl_domain_conf_thrift:'VersionedObject'().
 -type domain() :: dmsl_domain_thrift:'Domain'().
--type history() :: dmsl_domain_config_thrift:'History'().
+-type history() :: dmsl_domain_conf_thrift:'History'().
 -type opts() :: #{
     transport_opts => woody_client_thrift_http_transport:transport_options(),
     woody_context => woody_context:ctx()
@@ -101,11 +100,13 @@
 
 %%% API
 
--spec try_checkout_data(object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+-spec try_checkout_data(object_ref()) ->
+    {ok, untagged_domain_object()} | {error, object_not_found} | no_return().
 try_checkout_data(ObjectRef) ->
     try_checkout_data(get_last_version(), ObjectRef).
 
--spec try_checkout_data(version(), object_ref()) -> {ok, object_data()} | {error, object_not_found} | no_return().
+-spec try_checkout_data(version(), object_ref()) ->
+    {ok, untagged_domain_object()} | {error, object_not_found} | no_return().
 try_checkout_data(Version, Ref) ->
     case do_checkout_object(Version, Ref, #{}) of
         {ok, {_Type, Object}} ->
@@ -162,7 +163,10 @@ checkout_versioned_object(Reference, ObjectReference) ->
 -spec checkout_versioned_object(version(), object_ref(), opts()) -> versioned_object() | no_return().
 checkout_versioned_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    #'VersionedObject'{version = Version, object = checkout_object(Reference, ObjectReference, Opts)}.
+    #domain_conf_VersionedObject{
+        version = Version,
+        object = checkout_object(Reference, ObjectReference, Opts)
+    }.
 
 -spec checkout_objects_by_type(object_type()) -> [untagged_domain_object()] | no_return().
 checkout_objects_by_type(ObjectType) ->
@@ -262,12 +266,12 @@ insert(Reference, Objects) ->
 
 -spec insert(version(), domain_object() | [domain_object()], opts()) -> vsn() | no_return().
 insert(Reference, Objects, Opts) ->
-    Commit = #'Commit'{
+    Commit = #domain_conf_Commit{
         ops = [
-            {insert, #'InsertOp'{
+            {insert, #domain_conf_InsertOp{
                 object = Object
             }}
-            || Object <- Objects
+         || Object <- Objects
         ]
     },
     commit(Reference, Commit, Opts).
@@ -285,14 +289,14 @@ update(Reference, NewObjects) ->
 -spec update(version(), domain_object() | [domain_object()], opts()) -> vsn() | no_return().
 update(Reference, NewObjects, Opts) ->
     Version = updating_ref_to_version(Reference),
-    Commit = #'Commit'{
+    Commit = #domain_conf_Commit{
         ops = [
-            {update, #'UpdateOp'{
+            {update, #domain_conf_UpdateOp{
                 old_object = OldObject,
                 new_object = NewObject
             }}
-            || NewObject = {Tag, {_ObjectName, Ref, _Data}} <- NewObjects,
-               OldObject <- [checkout_object(Version, {Tag, Ref}, Opts)]
+         || NewObject = {Tag, {_ObjectName, Ref, _Data}} <- NewObjects,
+            OldObject <- [checkout_object(Version, {Tag, Ref}, Opts)]
         ]
     },
     %% Don't need pre-commit update: done in the beginning
@@ -311,7 +315,7 @@ upsert(Reference, NewObjects) ->
 -spec upsert(version(), domain_object() | [domain_object()], opts()) -> vsn() | no_return().
 upsert(Reference, NewObjects, Opts) ->
     Version = updating_ref_to_version(Reference),
-    Commit = #'Commit'{
+    Commit = #domain_conf_Commit{
         ops = lists:foldl(
             fun(NewObject = {Tag, {ObjectName, Ref, _Data}}, Ops) ->
                 case unwrap_find(do_checkout_object(Version, {Tag, Ref}, Opts)) of
@@ -319,7 +323,7 @@ upsert(Reference, NewObjects, Opts) ->
                         Ops;
                     {ok, OldObject = {Tag, {ObjectName, Ref, _OldData}}} ->
                         [
-                            {update, #'UpdateOp'{
+                            {update, #domain_conf_UpdateOp{
                                 old_object = OldObject,
                                 new_object = NewObject
                             }}
@@ -327,7 +331,7 @@ upsert(Reference, NewObjects, Opts) ->
                         ];
                     {error, object_not_found} ->
                         [
-                            {insert, #'InsertOp'{
+                            {insert, #domain_conf_InsertOp{
                                 object = NewObject
                             }}
                             | Ops
@@ -353,12 +357,12 @@ remove(Reference, Objects) ->
 
 -spec remove(version(), domain_object() | [domain_object()], opts()) -> vsn() | no_return().
 remove(Reference, Objects, Opts) ->
-    Commit = #'Commit'{
+    Commit = #domain_conf_Commit{
         ops = [
-            {remove, #'RemoveOp'{
+            {remove, #domain_conf_RemoveOp{
                 object = Object
             }}
-            || Object <- Objects
+         || Object <- Objects
         ]
     },
     commit(Reference, Commit, Opts).
@@ -397,7 +401,7 @@ stop(_State) ->
 unwrap({ok, Acc}) -> Acc;
 unwrap({error, {woody_error, _} = Error}) -> erlang:error(Error);
 unwrap({error, version_not_found = Reason}) -> erlang:error(Reason);
-unwrap({error, object_not_found}) -> erlang:throw(#'ObjectNotFound'{}).
+unwrap({error, object_not_found}) -> erlang:throw(#domain_conf_ObjectNotFound{}).
 
 %% Pass object_not_found as is, raising only some of errors
 unwrap_find({error, {woody_error, _} = Error}) -> erlang:error(Error);

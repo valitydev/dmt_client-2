@@ -1,37 +1,42 @@
-#!/bin/bash
-cat <<EOF
-version: '2.1'
+version: '3'
 services:
-  ${SERVICE_NAME}:
-    image: ${BUILD_IMAGE}
-    volumes:
-      - .:$PWD
-      - $HOME/.cache:/home/$UNAME/.cache
-    working_dir: $PWD
-    command: /sbin/init
+
+  testrunner:
+    image: $DEV_IMAGE_TAG
+    build:
+      dockerfile: Dockerfile.dev
+      context: .
+      args:
+        OTP_VERSION: $OTP_VERSION
+        THRIFT_VERSION: $THRIFT_VERSION
     depends_on:
       dominant:
         condition: service_healthy
+    volumes:
+      - .:$PWD
+    working_dir: $PWD
+    command: /sbin/init
+
   dominant:
-    image: dr2.rbkmoney.com/rbkmoney/dominant:6896d15357e87eb3de47d3e1aabcb1444e9c4f90
+    image: ghcr.io/valitydev/dominant:sha-eb1cccb
     command: /opt/dominant/bin/dominant foreground
     depends_on:
       machinegun:
         condition: service_healthy
     healthcheck:
-      test: "curl http://localhost:8022/"
+      test: "/opt/dominant/bin/dominant ping"
       interval: 5s
-      timeout: 1s
+      timeout: 3s
       retries: 12
+
   machinegun:
-    image: dr2.rbkmoney.com/rbkmoney/machinegun:b366973cec80a4d326840660405e50a3cac6cded
+    image: ghcr.io/valitydev/machinegun:sha-51546f7
     command: /opt/machinegun/bin/machinegun foreground
     volumes:
       - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
       - ./test/machinegun/cookie:/opt/machinegun/etc/cookie
     healthcheck:
-      test: "curl http://localhost:8022/"
+      test: "/opt/machinegun/bin/machinegun ping"
       interval: 5s
       timeout: 1s
       retries: 12
-EOF
