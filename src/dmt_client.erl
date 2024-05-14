@@ -254,6 +254,8 @@ pull_range(Reference, Limit, Opts) ->
 %% - and all of them do not let combine operations (insert X + update Ys + remove Z),
 %%   so the changes will be split via N (3 in this case) commits and won't be transactional
 
+%% TODO Allow to set creation timestamp
+
 -spec insert(domain_object() | [domain_object()]) -> vsn() | no_return().
 insert(ObjectOrObjects) ->
     insert(latest, ObjectOrObjects).

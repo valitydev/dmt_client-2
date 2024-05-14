@@ -5,11 +5,11 @@
  {<<"cowlib">>,{pkg,<<"cowlib">>,<<"2.11.0">>},2},
  {<<"damsel">>,
   {git,"https://github.com/valitydev/damsel.git",
-       {ref,"f718741970470474efcd32800daf885cb8d75584"}},
+       {ref,"ab292d91f5265237351342675c8f69de17add673"}},
   0},
  {<<"dmt_core">>,
   {git,"https://github.com/valitydev/dmt-core.git",
-       {ref,"75841332fe0b40a77da0c12ea8d5dbb994da8e82"}},
+       {ref,"19d8f57198f2cbe5b64aa4a923ba32774e505503"}},
   0},
  {<<"genlib">>,
   {git,"https://github.com/valitydev/genlib.git",
@@ -25,6 +25,7 @@
   {pkg,<<"opentelemetry_semantic_conventions">>,<<"0.2.0">>},
   2},
  {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.3.1">>},2},
+ {<<"prometheus">>,{pkg,<<"prometheus">>,<<"4.6.0">>},0},
  {<<"ranch">>,{pkg,<<"ranch">>,<<"1.8.0">>},2},
  {<<"snowflake">>,
   {git,"https://github.com/valitydev/snowflake.git",
@@ -38,7 +39,7 @@
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.7.0">>},2},
  {<<"woody">>,
   {git,"https://github.com/valitydev/woody_erlang.git",
-       {ref,"5d46291a6bfcee0bae2a9346a7d927603a909249"}},
+       {ref,"81219ba5408e1c67f5eaed3c7e566ede42da88d4"}},
   0}]}.
 [
 {pkg_hash,[
@@ -54,6 +55,7 @@
  {<<"opentelemetry_api">>, <<"7B69ED4F40025C005DE0B74FCE8C0549625D59CB4DF12D15C32FE6DC5076FF42">>},
  {<<"opentelemetry_semantic_conventions">>, <<"B67FE459C2938FCAB341CB0951C44860C62347C005ACE1B50F8402576F241435">>},
  {<<"parse_trans">>, <<"16328AB840CC09919BD10DAB29E431DA3AF9E9E7E7E6F0089DD5A2D2820011D8">>},
+ {<<"prometheus">>, <<"20510F381DB1CCAB818B4CF2FAC5FA6AB5CC91BC364A154399901C001465F46F">>},
  {<<"ranch">>, <<"8C7A100A139FD57F17327B6413E4167AC559FBC04CA7448E9BE9057311597A1D">>},
  {<<"ssl_verify_fun">>, <<"354C321CF377240C7B8716899E182CE4890C5938111A1296ADD3EC74CF1715DF">>},
  {<<"unicode_util_compat">>, <<"BC84380C9AB48177092F43AC89E4DFA2C6D62B40B8BD132B1059ECC7232F9A78">>}]},
@@ -70,6 +72,7 @@
  {<<"opentelemetry_api">>, <<"6D7A27B7CAD2AD69A09CABF6670514CAFCEC717C8441BEB5C96322BAC3D05350">>},
  {<<"opentelemetry_semantic_conventions">>, <<"D61FA1F5639EE8668D74B527E6806E0503EFC55A42DB7B5F39939D84C07D6895">>},
  {<<"parse_trans">>, <<"07CD9577885F56362D414E8C4C4E6BDF10D43A8767ABB92D24CBE8B24C54888B">>},
+ {<<"prometheus">>, <<"4905FD2992F8038ECCD7AA0CD22F40637ED618C0BED1F75C05AACEC15B7545DE">>},
  {<<"ranch">>, <<"49FBCFD3682FAB1F5D109351B61257676DA1A2FDBE295904176D5E521A2DDFE5">>},
  {<<"ssl_verify_fun">>, <<"FE4C190E8F37401D30167C8C405EDA19469F34577987C76DDE613E838BBC67F8">>},
  {<<"unicode_util_compat">>, <<"25EEE6D67DF61960CF6A794239566599B09E17E668D3700247BC498638152521">>}]}
