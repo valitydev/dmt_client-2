@@ -55,6 +55,7 @@
 
 -record(snap, {
     vsn :: dmt_client:vsn(),
+    created_at :: dmt_client:vsn_created_at(),
     tid :: ets:tid(),
     last_access :: timestamp()
 }).
@@ -305,7 +306,7 @@ do_fold_objects(Version, Folder, Acc) ->
     end.
 
 -spec put_snapshot(dmt_client:snapshot()) -> ok.
-put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}) ->
+put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain, created_at = CreatedAt}) ->
     case fetch_snap(Version) of
         {ok, _Snap} ->
             ok;
@@ -314,6 +315,7 @@ put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}) ->
             true = put_domain_to_table(TID, Domain),
             Snap = #snap{
                 vsn = Version,
+                created_at = CreatedAt,
                 tid = TID,
                 last_access = timestamp()
             },
@@ -448,7 +450,7 @@ dispatch_reply(From, Response) ->
     gen_server:reply(From, Response).
 
 -spec build_snapshot(snap()) -> {ok, dmt_client:snapshot()} | {error, version_not_found}.
-build_snapshot(#snap{vsn = Version, tid = TID}) ->
+build_snapshot(#snap{vsn = Version, created_at = CreatedAt, tid = TID}) ->
     try
         Domain = ets:foldl(
             fun(#object{obj = Object}, Domain) ->
@@ -458,7 +460,7 @@ build_snapshot(#snap{vsn = Version, tid = TID}) ->
             dmt_domain:new(),
             TID
         ),
-        {ok, #domain_conf_Snapshot{version = Version, domain = Domain}}
+        {ok, #domain_conf_Snapshot{version = Version, domain = Domain, created_at = CreatedAt}}
     catch
         % table was deleted due to cleanup process or crash
         error:badarg ->
@@ -588,21 +590,23 @@ cleanup() ->
 -spec test_cleanup() -> _.
 test_cleanup() ->
     set_cache_limits(2),
-    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new()}),
+    CreatedAt = <<"2024-05-14T10:00:00+03:00">>,
+    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new(), created_at = CreatedAt}),
     ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
     ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
     ok = put_snapshot(#domain_conf_Snapshot{version = 1, domain = dmt_domain:new()}),
     cleanup(),
     [
         #snap{vsn = 1, _ = _},
-        #snap{vsn = 4, _ = _}
+        #snap{vsn = 4, created_at = CreatedAt, _ = _}
     ] = get_all_snaps().
 
 -spec test_last_access() -> _.
 test_last_access() ->
     set_cache_limits(3),
+    CreatedAt = <<"2024-05-14T10:00:00+03:00">>,
     % Tables already created in test_cleanup/0
-    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new()}),
+    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new(), created_at = CreatedAt}),
     ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
     ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
     Ref = {category, #domain_CategoryRef{id = 1}},
@@ -612,7 +616,7 @@ test_last_access() ->
     [
         #snap{vsn = 1, _ = _},
         #snap{vsn = 3, _ = _},
-        #snap{vsn = 4, _ = _}
+        #snap{vsn = 4, created_at = CreatedAt, _ = _}
     ] = get_all_snaps().
 
 -spec test_get_object() -> _.

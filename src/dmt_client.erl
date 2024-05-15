@@ -59,6 +59,7 @@
 
 -export_type([ref/0]).
 -export_type([vsn/0]).
+-export_type([vsn_created_at/0]).
 -export_type([version/0]).
 -export_type([limit/0]).
 -export_type([snapshot/0]).
@@ -77,6 +78,7 @@
 
 -type ref() :: dmsl_domain_conf_thrift:'Reference'().
 -type vsn() :: dmsl_domain_conf_thrift:'Version'().
+-type vsn_created_at() :: dmsl_base_thrift:'Timestamp'() | undefined.
 -type version() :: vsn() | latest.
 -type limit() :: dmsl_domain_conf_thrift:'Limit'().
 -type snapshot() :: dmsl_domain_conf_thrift:'Snapshot'().
@@ -253,6 +255,8 @@ pull_range(Reference, Limit, Opts) ->
 %% - some of them have suboptimal performance (see update implementation)
 %% - and all of them do not let combine operations (insert X + update Ys + remove Z),
 %%   so the changes will be split via N (3 in this case) commits and won't be transactional
+
+%% TODO Allow to set creation timestamp
 
 -spec insert(domain_object() | [domain_object()]) -> vsn() | no_return().
 insert(ObjectOrObjects) ->
