@@ -32,7 +32,7 @@
 
 -include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 
--type vsn() :: dmsl_domain_conf_thrift:'Version'().
+-type vsn() :: dmsl_domain_conf_v2_thrift:'Version'().
 -type version() :: vsn() | latest.
 -type commit() :: dmsl_domain_conf_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().

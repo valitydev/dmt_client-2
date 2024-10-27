@@ -1,6 +1,6 @@
 -module(dmt_client_backend).
 
--export([commit/3]).
+-export([commit/4]).
 -export([checkout_object/3]).
 
 %%% Behaviour callbacks
