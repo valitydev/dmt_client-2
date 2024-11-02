@@ -5,14 +5,24 @@
 
 %%% Behaviour callbacks
 
--callback commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
+-callback commit(
+    dmt_client:vsn(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) -> dmt_client:vsn() | no_return().
 
 -callback checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
     dmsl_domain_thrift:'DomainObject'() | no_return().
 
 %%% API
 
--spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
+-spec commit(
+    dmt_client:vsn(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) -> dmt_client:vsn() | no_return().
 commit(Version, Commit, UserOpID, Opts) ->
     call(commit, [Version, Commit, UserOpID, Opts]).
 

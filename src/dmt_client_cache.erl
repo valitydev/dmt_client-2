@@ -47,6 +47,8 @@
     last_access :: timestamp()
 }).
 
+-type object() :: #object{}.
+
 -type ets_match() :: '_' | '$1' | {atom(), ets_match()}.
 
 -type woody_error() :: {woody_error, woody_error:system_error()}.
@@ -173,9 +175,7 @@ ensure_object_version(ObjectRef, Version, Opts) ->
 -spec do_get_object(dmt_client:vsn(), dmt_client:object_ref()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
 do_get_object(ObjectRef, Version) ->
-    case
-        ets:lookup(?TABLE, {ObjectRef, Version})
-    of
+    case ets:lookup(?TABLE, {ObjectRef, Version}) of
         [#object{obj = Object}] ->
             true = update_last_access(ObjectRef, Version),
             {ok, Object};
@@ -192,7 +192,7 @@ put_object_into_table(Ref, Version, Object, CreatedAt) ->
         last_access = timestamp()
     }).
 
--spec get_all_objects() -> [snap()].
+-spec get_all_objects() -> [object()].
 get_all_objects() ->
     ets:tab2list(?TABLE).
 
@@ -223,7 +223,8 @@ schedule_fetch(ObjectRef, VersionReference, Opts) ->
                         created_at = CreatedAt
                     }} ->
                         put_object_into_table(ObjectRef, Version, Object, CreatedAt),
-%%                      This will be called every time some new object is required. Maybe consider alternative
+                        %% This will be called every time some new object is required.
+                        %% Maybe consider alternative
                         cast(cleanup),
                         {ok, ObjectRef, Version};
                     {error, _} = Error ->
@@ -251,7 +252,6 @@ dispatch_reply(undefined, _Result) ->
     ok;
 dispatch_reply(From, Response) ->
     gen_server:reply(From, Response).
-
 -spec cleanup(state()) -> ok.
 cleanup(#state{config = Config}) ->
     Objs = get_all_objects(),
@@ -288,7 +288,7 @@ remove_obj(#object{ref = Ref, vsn = Version}) ->
     true = ets:delete(?TABLE, {Ref, Version}),
     ok.
 
--spec update_last_access(dmt_client:vsn()) -> boolean().
+-spec update_last_access(dmt_client:object_ref(), dmt_client:vsn()) -> boolean().
 update_last_access(Reference, Version) ->
     ets:update_element(?TABLE, {Reference, Version}, {#object.last_access, timestamp()}).
 

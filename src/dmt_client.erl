@@ -28,6 +28,7 @@
 -export_type([commit/0]).
 -export_type([object_ref/0]).
 -export_type([domain_object/0]).
+-export_type([user_op_id/0]).
 -export_type([opts/0]).
 
 -include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
@@ -37,6 +38,7 @@
 -type commit() :: dmsl_domain_conf_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
 -type domain_object() :: dmsl_domain_thrift:'ReflessDomainObject'().
+-type user_op_id() :: dmsl_domain_conf_v2_thrift:'UserOpID'().
 -type opts() :: #{
     transport_opts => woody_client_thrift_http_transport:transport_options(),
     woody_context => woody_context:ctx()
@@ -60,11 +62,11 @@ do_checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
     dmt_client_cache:get_object(Version, ObjectReference, Opts).
 
--spec commit(commit()) -> vsn() | no_return().
+-spec commit(vsn(), commit(), user_op_id()) -> vsn() | no_return().
 commit(Version, Commit, UserOpID) ->
     commit(Version, Commit, UserOpID, #{}).
 
--spec commit(commit(), opts()) -> vsn() | no_return().
+-spec commit(vsn(), commit(), user_op_id(), opts()) -> vsn() | no_return().
 commit(Version, Commit, UserOpID, Opts) ->
     dmt_client_backend:commit(Version, Commit, UserOpID, Opts).
 

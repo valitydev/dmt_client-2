@@ -1,4 +1,3 @@
-version: '3'
 services:
 
   testrunner:
@@ -20,9 +19,6 @@ services:
   dominant:
     image: ghcr.io/valitydev/dominant-v2:master
     command: /opt/dmt/bin/dmt foreground
-    depends_on:
-      machinegun:
-        condition: service_healthy
     healthcheck:
       test: "/opt/dmt/bin/dmt ping"
       interval: 5s

@@ -5,7 +5,12 @@
 -export([commit/4]).
 -export([checkout_object/3]).
 
--spec commit(dmt_client:vsn(), dmt_client:commit(), term(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
+-spec commit(
+    dmt_client:vsn(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) -> dmt_client:vsn() | no_return().
 commit(Version, Commit, UserOpID, Opts) ->
     call('Repository', 'Commit', {Version, Commit, UserOpID}, Opts).
 
