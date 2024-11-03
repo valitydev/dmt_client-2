@@ -60,7 +60,7 @@ checkout_object(Reference, ObjectReference, Opts) ->
 
 do_checkout_object(Reference, ObjectReference, Opts) ->
     Version = ref_to_version(Reference),
-    dmt_client_cache:get_object(Version, ObjectReference, Opts).
+    dmt_client_cache:get_object(ObjectReference, Version, Opts).
 
 -spec commit(vsn(), commit(), user_op_id()) -> vsn() | no_return().
 commit(Version, Commit, UserOpID) ->

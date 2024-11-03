@@ -19,7 +19,6 @@
 
 -define(TABLE, ?MODULE).
 -define(SERVER, ?MODULE).
--define(DEFAULT_INTERVAL, 5000).
 -define(DEFAULT_CALL_TIMEOUT, 10000).
 -define(DEFAULT_MAX_ELEMENTS, 20).
 %% 50Mb by default
@@ -34,12 +33,13 @@
     public,
     {read_concurrency, true},
     {write_concurrency, true},
-    {keypos, {#object.vsn, #object.ref}}
+    {keypos, #object.id}
 ]).
 
 -type timestamp() :: integer().
 
 -record(object, {
+    id :: {dmt_client:object_ref(), dmt_client:object_ref()},
     vsn :: dmt_client:vsn(),
     ref :: dmt_client:object_ref() | ets_match(),
     obj :: dmt_client:domain_object() | ets_match(),
@@ -63,13 +63,12 @@
 }.
 
 -record(state, {
-    timer = undefined :: undefined | reference(),
     waiters = #{} :: waiters(),
     config = #{} :: cache_config()
 }).
 
 -type cache_config() :: #{
-    max_snapshots => non_neg_integer(),
+    max_objects => non_neg_integer(),
     max_memory => non_neg_integer()
 }.
 
@@ -83,9 +82,9 @@ start_link() ->
 
 -spec get_object(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:opts()) ->
     {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
-get_object(Version, ObjectRef, Opts) ->
-    case ensure_object_version(Version, ObjectRef, Opts) of
-        {ok, {Version, ObjectRef}} -> do_get_object(ObjectRef, Version);
+get_object(ObjectRef, Version, Opts) ->
+    case ensure_object_version(ObjectRef, Version, Opts) of
+        {ok, {ObjectRef, NewVersion}} -> do_get_object(ObjectRef, NewVersion);
         {error, _} = Error -> Error
     end.
 
@@ -99,17 +98,21 @@ init(_) ->
 
 -spec handle_call(term(), {pid(), term()}, state()) -> {reply, term(), state()}.
 handle_call({fetch_object_version, ObjectRef, Version, Opts}, From, State) ->
-    case ets:member(?TABLE, {Version, ObjectRef}) of
+    % Check if object appeared between call and handle
+    case ets:member(?TABLE, {ObjectRef, Version}) of
         true ->
+            io:format("object appeared: ~p~n", [{ObjectRef, Version}]),
             {reply, {ok, {ObjectRef, Version}}, State};
         false ->
-            {noreply, fetch_by_reference(Version, ObjectRef, From, Opts, State)}
+            io:format("object didn't appear: ~p~n", [{ObjectRef, Version}]),
+            {noreply, fetch_by_reference(ObjectRef, Version, From, Opts, State)}
     end;
 handle_call(_Msg, _From, State) ->
     {noreply, State}.
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
+    io:format("dispatch Reference: ~pn Result: ~p~n", [Reference, Result]),
     _ = [DispatchFun(From, Result) || {From, DispatchFun} <- maps:get(Reference, Waiters, [])],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
 handle_cast(cleanup, State) ->
@@ -145,7 +148,7 @@ build_config() ->
     true = 0 =< MaxMemory,
     #{
         max_memory => MaxMemory,
-        max_snapshots => MaxElements
+        max_objects => MaxElements
     }.
 
 -spec call(term()) -> term().
@@ -168,8 +171,11 @@ cast(Msg) ->
 
 ensure_object_version(ObjectRef, Version, Opts) ->
     case ets:member(?TABLE, {ObjectRef, Version}) of
-        true -> {ok, {ObjectRef, Version}};
-        false -> call({fetch_object_version, ObjectRef, Version, Opts})
+        true ->
+            {ok, {ObjectRef, Version}};
+        false ->
+            io:format("couldn't find: ~p", [{ObjectRef, Version}]),
+            call({fetch_object_version, ObjectRef, Version, Opts})
     end.
 
 -spec do_get_object(dmt_client:vsn(), dmt_client:object_ref()) ->
@@ -185,6 +191,7 @@ do_get_object(ObjectRef, Version) ->
 
 put_object_into_table(Ref, Version, Object, CreatedAt) ->
     true = ets:insert(?TABLE, #object{
+        id = {Ref, Version},
         ref = Ref,
         vsn = Version,
         obj = Object,
@@ -202,15 +209,24 @@ fetch_by_reference(ObjectRef, VersionReference, From, Opts, #state{waiters = Wai
     State#state{waiters = NewWaiters}.
 
 maybe_fetch(ObjectRef, VersionReference, ReplyTo, DispatchFun, Waiters, Opts) ->
-    Prev =
-        case maps:find({ObjectRef, VersionReference}, Waiters) of
-            error ->
-                _Pid = schedule_fetch(ObjectRef, VersionReference, Opts),
-                [];
-            {ok, List} ->
-                List
-        end,
-    Waiters#{{ObjectRef, VersionReference} => [{ReplyTo, DispatchFun} | Prev]}.
+    % First check if we already have waiters for this request
+    WaiterKey = {ObjectRef, VersionReference},
+    case maps:find(WaiterKey, Waiters) of
+        {ok, List} ->
+            % Request already in progress, just add to waiters
+            Waiters#{WaiterKey => [{ReplyTo, DispatchFun} | List]};
+        error ->
+            % Double check the cache before scheduling a fetch
+            case ets:member(?TABLE, {ObjectRef, VersionReference}) of
+                true ->
+                    % Object appeared in cache while we were processing
+                    Waiters;
+                false ->
+                    % Schedule new fetch and create waiters list
+                    _Pid = schedule_fetch(ObjectRef, VersionReference, Opts),
+                    Waiters#{WaiterKey => [{ReplyTo, DispatchFun}]}
+            end
+    end.
 
 schedule_fetch(ObjectRef, VersionReference, Opts) ->
     spawn_link(
@@ -218,15 +234,16 @@ schedule_fetch(ObjectRef, VersionReference, Opts) ->
             Result =
                 case fetch(VersionReference, ObjectRef, Opts) of
                     {ok, #domain_conf_v2_VersionedObject{
-                        global_version = Version,
+                        global_version = Version0,
                         object = Object,
                         created_at = CreatedAt
                     }} ->
-                        put_object_into_table(ObjectRef, Version, Object, CreatedAt),
+                        Version1 = {version, Version0},
+                        put_object_into_table(ObjectRef, Version1, Object, CreatedAt),
                         %% This will be called every time some new object is required.
                         %% Maybe consider alternative
                         cast(cleanup),
-                        {ok, ObjectRef, Version};
+                        {ok, {ObjectRef, Version1}};
                     {error, _} = Error ->
                         Error
                 end,
@@ -252,6 +269,7 @@ dispatch_reply(undefined, _Result) ->
     ok;
 dispatch_reply(From, Response) ->
     gen_server:reply(From, Response).
+
 -spec cleanup(state()) -> ok.
 cleanup(#state{config = Config}) ->
     Objs = get_all_objects(),
@@ -299,127 +317,183 @@ timestamp() ->
 %% TODO remake them
 
 %%% Unit tests
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-spec test() -> _.
+
 %%
-%%-ifdef(TEST).
+%% Test Fixtures
 %%
-%%-include_lib("eunit/include/eunit.hrl").
-%%-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+
+-define(TEST_REF, {test_type, <<"test_id">>}).
+-define(TEST_OBJ(Id), #{name => <<"test">>, id => Id}).
+-define(TEST_VERSIONED_OBJ(Ver), #domain_conf_v2_VersionedObject{
+    global_version = Ver,
+    object = ?TEST_OBJ(Ver),
+    created_at = <<"2024-01-01T00:00:00Z">>
+}).
+
 %%
-%%-type testcase() :: function() | {_Loc, function()} | [testcase()] | {setup, function(), testcase()}.
+%% Test Cases
 %%
-%%% dirty hack for warn_missing_spec
-%%-spec test() -> any().
+
+-spec dmt_cache_test_() -> _.
+dmt_cache_test_() ->
+    {foreach, fun test_setup/0, fun test_cleanup/1, [
+        {"Basic object caching works", fun test_basic_caching/0},
+        {"Cache respects size limits", fun test_size_limits/0},
+        {"Cache updates last access time", fun test_last_access/0},
+        {"Cache handles missing objects", fun test_missing_object/0},
+        {"Cache handles concurrent access", fun test_concurrent_access/0}
+    ]}.
+
 %%
-%%-spec all_test_() -> testcase().
+%% Setup/Cleanup
 %%
-%%all_test_() ->
-%%    {setup,
-%%        fun() ->
-%%            create_tables(),
-%%            %% So that put_snapshot works correctly
-%%            register(?SERVER, self())
-%%        end,
-%%        [
-%%            fun test_cleanup/0,
-%%            fun test_last_access/0,
-%%            fun test_get_object/0,
-%%            fun test_get_object_by_type/0,
-%%            fun test_fold/0
-%%        ]}.
+
+test_setup() ->
+    application:set_env(dmt_client, max_cache_size, #{
+        elements => 2,
+        memory => 52428800
+    }),
+    {ok, Pid} = dmt_client_cache:start_link(),
+    Pid.
+
+test_cleanup(Pid) ->
+    ets:delete(?TABLE),
+    gen_server:stop(Pid),
+    meck:unload(),
+    application:unset_env(dmt_client, max_cache_size),
+    ok.
+
 %%
-%%set_cache_limits(Elements) ->
-%%    set_cache_limits(Elements, 52428800).
+%% Individual Test Cases
 %%
-%%set_cache_limits(Elements, Memory) ->
-%%    application:set_env(dmt_client, max_cache_size, #{elements => Elements, memory => Memory}).
-%%
-%%cleanup() ->
-%%    cleanup(#state{config = build_config()}).
-%%
-%%-spec test_cleanup() -> _.
-%%test_cleanup() ->
-%%    set_cache_limits(2),
-%%    CreatedAt = <<"2024-05-14T10:00:00+03:00">>,
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new(), created_at = CreatedAt}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 1, domain = dmt_domain:new()}),
-%%    cleanup(),
-%%    [
-%%        #snap{vsn = 1, _ = _},
-%%        #snap{vsn = 4, created_at = CreatedAt, _ = _}
-%%    ] = get_all_objects().
-%%
-%%-spec test_last_access() -> _.
-%%test_last_access() ->
-%%    set_cache_limits(3),
-%%    CreatedAt = <<"2024-05-14T10:00:00+03:00">>,
-%%    % Tables already created in test_cleanup/0
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 4, domain = dmt_domain:new(), created_at = CreatedAt}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 3, domain = dmt_domain:new()}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 2, domain = dmt_domain:new()}),
-%%    Ref = {category, #domain_CategoryRef{id = 1}},
-%%    {error, object_not_found} = get_object(3, Ref, #{}),
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = 1, domain = dmt_domain:new()}),
-%%    cleanup(),
-%%    [
-%%        #snap{vsn = 1, _ = _},
-%%        #snap{vsn = 3, _ = _},
-%%        #snap{vsn = 4, created_at = CreatedAt, _ = _}
-%%    ] = get_all_objects().
-%%
-%%-spec test_get_object() -> _.
-%%test_get_object() ->
-%%    set_cache_limits(1),
-%%    Version = 5,
-%%    Cat = {_, {_, Ref, _}} = dmt_client_fixtures:fixture(category),
-%%    Domain = dmt_client_fixtures:domain_insert(Cat),
-%%
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
-%%    {ok, Cat} = get_object(Version, {category, Ref}, #{}).
-%%
-%%-spec test_get_object_by_type() -> _.
-%%test_get_object_by_type() ->
-%%    set_cache_limits(1),
-%%    Version = 6,
-%%    {_, Cat1} = dmt_client_fixtures:fixture(category),
-%%    {_, Cat2} = dmt_client_fixtures:fixture(category2),
-%%
-%%    Domain = dmt_client_fixtures:domain_with_all_fixtures(),
-%%
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
-%%
-%%    {ok, Objects} = get_objects_by_type(Version, category, #{}),
-%%    [Cat1, Cat2] = lists:sort(Objects).
-%%
-%%-spec test_fold() -> _.
-%%test_fold() ->
-%%    set_cache_limits(1),
-%%    Version = 7,
-%%
-%%    Domain = dmt_client_fixtures:domain_with_all_fixtures(),
-%%
-%%    ok = put_snapshot(#domain_conf_Snapshot{version = Version, domain = Domain}),
-%%
-%%    {ok, OrdSet} = fold_objects(
-%%        Version,
-%%        fun
-%%            (
-%%                category,
-%%                #'domain_CategoryObject'{
-%%                    ref = #'domain_CategoryRef'{id = ID}
-%%                },
-%%                Acc
-%%            ) ->
-%%                ordsets:add_element(ID, Acc);
-%%            (_Type, _Obj, Acc) ->
-%%                Acc
-%%        end,
-%%        ordsets:new(),
-%%        #{}
-%%    ),
-%%
-%%    [1, 2] = ordsets:to_list(OrdSet).
-%%
-%%% TEST
-%%-endif.
+
+test_basic_caching() ->
+    Version = {version, 1},
+    meck:new(dmt_client_backend, [passthrough]),
+    meck:expect(
+        dmt_client_backend,
+        checkout_object,
+        fun(VersionRef, ObjRef, _Opts) ->
+            ?assertEqual(Version, VersionRef),
+            ?assertEqual(?TEST_REF, ObjRef),
+            {ok, ?TEST_VERSIONED_OBJ(1)}
+        end
+    ),
+
+    % First access should fetch from backend
+    {ok, Object} = dmt_client_cache:get_object(?TEST_REF, Version, #{}),
+    ?assertEqual(?TEST_OBJ(1), Object),
+
+    % Second access should come from cache
+    {ok, CachedObject} = dmt_client_cache:get_object(?TEST_REF, Version, #{}),
+    ?assertEqual(Object, CachedObject),
+
+    % Verify backend was called only once
+    ?assertEqual(1, meck:num_calls(dmt_client_backend, checkout_object, '_')).
+
+test_size_limits() ->
+    meck:new(dmt_client_backend, [passthrough]),
+    meck:expect(
+        dmt_client_backend,
+        checkout_object,
+        fun({version, Ver}, _ObjRef, _Opts) ->
+            {ok, ?TEST_VERSIONED_OBJ(Ver)}
+        end
+    ),
+
+    % Add three objects to trigger cleanup
+    [dmt_client_cache:get_object(?TEST_REF, {version, Ver}, #{}) || Ver <- lists:seq(1, 3)],
+
+    % Verify only newest objects remain
+    Objects = ets:tab2list(?TABLE),
+    ?assertEqual(2, length(Objects)),
+
+    % Verify the oldest version was evicted
+    Result = do_get_object(?TEST_REF, {version, 1}),
+    ?assertEqual({error, object_not_found}, Result).
+
+test_last_access() ->
+    meck:new(dmt_client_backend, [passthrough]),
+    meck:expect(
+        dmt_client_backend,
+        checkout_object,
+        fun({version, Ver}, _ObjRef, _Opts) ->
+            {ok, ?TEST_VERSIONED_OBJ(Ver)}
+        end
+    ),
+
+    % Access objects in specific order
+    Version1 = {version, 1},
+    Version2 = {version, 2},
+
+    {ok, _} = dmt_client_cache:get_object(?TEST_REF, Version1, #{}),
+    timer:sleep(100),
+    {ok, _} = dmt_client_cache:get_object(?TEST_REF, Version2, #{}),
+    timer:sleep(100),
+    {ok, _} = dmt_client_cache:get_object(?TEST_REF, Version1, #{}),
+
+    % Get objects sorted by last access
+    Objects = lists:keysort(#object.last_access, ets:tab2list(?TABLE)),
+    [Obj1, Obj2] = Objects,
+
+    % Version2 should be least recently accessed
+    ?assertEqual(Version2, Obj1#object.vsn),
+    ?assertEqual(Version1, Obj2#object.vsn).
+
+test_missing_object() ->
+    meck:new(dmt_client_backend, [passthrough]),
+    meck:expect(
+        dmt_client_backend,
+        checkout_object,
+        fun(_VersionRef, _ObjRef, _Opts) ->
+            throw(#domain_conf_v2_ObjectNotFound{})
+        end
+    ),
+
+    Result = dmt_client_cache:get_object(?TEST_REF, {version, 1}, #{}),
+    ?assertEqual({error, object_not_found}, Result).
+
+test_concurrent_access() ->
+    meck:new(dmt_client_backend, [passthrough]),
+    meck:expect(
+        dmt_client_backend,
+        checkout_object,
+        fun(_VersionRef, _ObjRef, _Opts) ->
+            % Simulate slow backend
+            timer:sleep(100),
+            {ok, ?TEST_VERSIONED_OBJ(1)}
+        end
+    ),
+
+    Version = {version, 1},
+    % Start multiple concurrent requests
+    Self = self(),
+    Pids = [
+        spawn_link(fun() ->
+            Result = dmt_client_cache:get_object(?TEST_REF, Version, #{}),
+            Self ! {self(), Result}
+        end)
+     || _ <- lists:seq(1, 5)
+    ],
+
+    % Collect results
+    Results = [
+        receive
+            {Pid, Result} -> Result
+        end
+     || Pid <- Pids
+    ],
+
+    % All results should be successful and identical
+    [FirstResult | RestResults] = Results,
+    ?assertEqual({ok, ?TEST_OBJ(1)}, FirstResult),
+    ?assertEqual(lists:duplicate(length(RestResults), FirstResult), RestResults),
+
+    % Backend should be called only once
+    ?assertEqual(1, meck:num_calls(dmt_client_backend, checkout_object, '_')).
+
+-endif.
