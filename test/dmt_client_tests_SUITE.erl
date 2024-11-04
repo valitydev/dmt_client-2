@@ -1,130 +1,273 @@
 -module(dmt_client_tests_SUITE).
 
-% -include_lib("stdlib/include/assert.hrl").
+-include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
-% -export([all/0]).
-% -export([groups/0]).
-% -export([init_per_suite/1]).
-% -export([end_per_suite/1]).
-% -export([insert_and_all_checkouts/1]).
-% -export([inserts_updates_upserts_and_removes/1]).
-% -export([cached_latest/1]).
+%% Common test callbacks
+-export([
+    all/0,
+    groups/0,
+    init_per_suite/1,
+    end_per_suite/1
+]).
 
-% -include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
+%% Test cases
+-export([
+    checkout_nonexistent_object/1,
+    checkout_object_by_version/1,
+    checkout_latest_object/1,
+    commit_insert_object/1,
+    commit_update_object/1,
+    commit_remove_object/1,
+    commit_multiple_operations/1,
+    version_sequence_operations/1,
+    commit_conflict_handling/1
+]).
 
-% %%
-% %% tests descriptions
-% %%
-% -spec all() -> [term()].
-% all() ->
-%     [
-%         {group, all}
-%     ].
+-type config() :: ct_suite:ct_config().
 
-% -spec groups() -> [term()].
-% groups() ->
-%     [
-%         {all, [sequence], [
-%             insert_and_all_checkouts,
-%             inserts_updates_upserts_and_removes,
-%             cached_latest
-%         ]}
-%     ].
+%% CT callbacks
 
-% %%
-% %% starting/stopping
-% -spec init_per_suite(term()) -> term().
-% init_per_suite(C) ->
-%     Apps = genlib_app:start_application_with(dmt_client, [
-%         % milliseconds
-%         {cache_update_interval, 5000},
-%         {max_cache_size, #{
-%             elements => 1,
-%             % 2Kb
-%             memory => 2048
-%         }},
-%         {service_urls, #{
-%             'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-%             'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>
-%         }}
-%     ]),
-%     [{apps, Apps} | C].
+-spec all() -> [{group, atom()}].
+all() ->
+    [
+        {group, sequential_operations},
+        {group, parallel_operations}
+    ].
 
-% -spec end_per_suite(term()) -> term().
-% end_per_suite(C) ->
-%     genlib_app:stop_unload_applications(proplists:get_value(apps, C)).
+-spec groups() -> [{atom(), list(), [atom()]}].
+groups() ->
+    [
+        {sequential_operations, [], [
+            checkout_latest_object,
+            version_sequence_operations
+        ]},
+        {parallel_operations, [parallel], [
+            checkout_nonexistent_object,
+            checkout_object_by_version,
+            commit_insert_object,
+            commit_update_object,
+            commit_remove_object,
+            commit_multiple_operations,
+            commit_conflict_handling
+        ]}
+    ].
 
-% %%
-% %% tests
-% -spec insert_and_all_checkouts(term()) -> _.
-% insert_and_all_checkouts(_C) ->
-%     Object = dmt_client_fixtures:fixture_category_object(1, <<"InsertFixture">>),
-%     Ref = dmt_client_fixtures:fixture_category_ref(1),
-%     #domain_conf_ObjectNotFound{} = (catch dmt_client:checkout_object(Ref)),
-%     #domain_conf_Snapshot{version = Version1} = dmt_client:checkout(),
-%     Version2 = dmt_client:insert(Object),
-%     true = Version1 < Version2,
-%     #domain_conf_Snapshot{version = Version2} = dmt_client:checkout(),
-%     Object = dmt_client:checkout_object(Ref),
-%     #domain_conf_VersionedObject{
-%         version = Version2,
-%         object = Object
-%     } = dmt_client:checkout_versioned_object(latest, Ref).
+-spec init_per_suite(config()) -> config().
+init_per_suite(Config) ->
+    Apps = genlib_app:start_application_with(dmt_client, [
+        {max_cache_size, #{
+            elements => 20,
+            % 50MB
+            memory => 52428800
+        }},
+        {service_urls, #{
+            'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
+            'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>,
+            'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
+        }}
+    ]),
+    [{apps, Apps} | Config].
 
-% -spec inserts_updates_upserts_and_removes(term()) -> _.
-% inserts_updates_upserts_and_removes(_C) ->
-%     Cat1 = dmt_client_fixtures:fixture_category_object(10, <<"InsertFixture">>),
-%     Cat1Modified = dmt_client_fixtures:fixture_category_object(10, <<"Modified">>),
-%     Cat1ModifiedAgain = dmt_client_fixtures:fixture_category_object(10, <<"Strike Again">>),
-%     Cat1Ref = dmt_client_fixtures:fixture_category_ref(10),
+-spec end_per_suite(config()) -> any().
+end_per_suite(Config) ->
+    genlib_app:stop_unload_applications(?config(apps, Config)).
 
-%     Cat2 = dmt_client_fixtures:fixture_category_object(11, <<"Another cat">>),
-%     Cat2Ref = dmt_client_fixtures:fixture_category_ref(11),
+%% Tests
 
-%     Version1 = dmt_client:get_last_version(),
-%     Version2 = dmt_client:insert(Cat1),
-%     Cat1 = dmt_client:checkout_object(Cat1Ref),
+-spec checkout_nonexistent_object(config()) -> _.
+checkout_nonexistent_object(_Config) ->
+    Ref = make_domain_ref(),
+    ?assertThrow(
+        #domain_conf_v2_ObjectNotFound{},
+        dmt_client:checkout_object(Ref)
+    ).
 
-%     Version3 = dmt_client:update(Cat1Modified),
-%     #domain_conf_VersionedObject{
-%         version = Version3,
-%         object = Cat1Modified
-%     } = dmt_client:checkout_versioned_object(Cat1Ref),
+-spec checkout_object_by_version(config()) -> _.
+checkout_object_by_version(_Config) ->
+    Ref = make_domain_ref(),
+    {_, _, Object} = Obj = make_test_object(Ref),
+    Version = commit_insert(Obj),
 
-%     Version4 = dmt_client:upsert([Cat1ModifiedAgain, Cat2]),
-%     Cat1ModifiedAgain = dmt_client:checkout_object(Cat1Ref),
-%     Cat2 = dmt_client:checkout_object(Cat2Ref),
+    % Check we can get object by specific version
+    VersionRef = {version, Version},
+    #domain_conf_v2_VersionedObject{
+        object = Result
+    } = dmt_client:checkout_object(VersionRef, Ref),
+    ?assertEqual(Object, Result).
 
-%     Version5 = dmt_client:remove(Cat1ModifiedAgain),
-%     ?assertThrow(
-%         #domain_conf_ObjectNotFound{},
-%         dmt_client:checkout_object(Cat1Ref)
-%     ),
-%     Cat2 = dmt_client:checkout_object(Cat2Ref),
+-spec checkout_latest_object(config()) -> _.
+checkout_latest_object(_Config) ->
+    Ref = make_domain_ref(),
+    {_, _, Object} = Obj = make_test_object(Ref),
+    _Version = commit_insert(Obj),
 
-%     %% Check that all versions are strictly greater than previous ones
-%     Versions = [
-%         Version1,
-%         Version2,
-%         Version3,
-%         Version4,
-%         Version5
-%     ],
+    % Check we can get latest version
+    #domain_conf_v2_VersionedObject{
+        object = Result
+    } = dmt_client:checkout_object(latest, Ref),
+    ?assertEqual(Object, Result).
 
-%     ?assertEqual(Versions, ordsets:from_list(Versions)).
+-spec commit_insert_object(config) -> _.
+commit_insert_object(_Config) ->
+    Ref = make_domain_ref(),
+    {_, _, Object} = Obj = make_test_object(Ref),
+    #domain_conf_v2_CommitResponse{version = Version} =
+        commit_insert(Obj),
+    ?assert(is_integer(Version)),
 
-% -spec cached_latest(term()) -> _.
-% cached_latest(_C) ->
-%     Object = dmt_client_fixtures:fixture_category_object(100, <<"UpstreamLatest">>),
-%     Commit = #domain_conf_Commit{ops = [{insert, #domain_conf_InsertOp{object = Object}}]},
+    #domain_conf_v2_VersionedObject{
+        object = Result
+    } = dmt_client:checkout_object(Ref),
+    ?assertEqual(Object, Result).
 
-%     %% Get around library to prevent cache update
-%     Version = dmt_client:get_last_version(),
-%     NewVersion = dmt_client_backend:commit(Version, Commit, #{}),
+-spec commit_update_object(config()) -> _.
+commit_update_object(_Config) ->
+    Ref = make_domain_ref(),
+    Obj = make_test_object(Ref),
+    #domain_conf_v2_CommitResponse{version = Version1} =
+        commit_insert(Obj),
 
-%     application:unset_env(dmt_client, use_cached_last_version),
-%     Version = dmt_client:get_last_version(),
-%     application:set_env(dmt_client, use_cached_last_version, true),
-%     Version = dmt_client:get_last_version(),
-%     application:set_env(dmt_client, use_cached_last_version, false),
-%     NewVersion = dmt_client:get_last_version().
+    {_, _, Object2} = make_test_object(Ref, <<"new_name">>),
+    #domain_conf_v2_CommitResponse{version = Version2} =
+        commit_update(Version1, Object2),
+    ?assert(Version2 > Version1),
+
+    #domain_conf_v2_VersionedObject{
+        object = Result
+    } = dmt_client:checkout_object(Ref),
+    ?assertEqual(Object2, Result).
+
+-spec commit_remove_object(config()) -> _.
+commit_remove_object(_Config) ->
+    Ref = make_domain_ref(),
+    Obj = make_test_object(Ref),
+    #domain_conf_v2_CommitResponse{version = Version1} =
+        commit_insert(Obj),
+
+    #domain_conf_v2_CommitResponse{version = Version2} =
+        commit_remove(Version1, Ref),
+    ?assert(Version2 > Version1),
+
+    ?assertThrow(
+        #domain_conf_v2_ObjectNotFound{},
+        dmt_client:checkout_object(Ref)
+    ).
+
+-spec commit_multiple_operations(config()) -> _.
+commit_multiple_operations(_Config) ->
+    Ref1 = make_domain_ref(),
+    Ref2 = make_domain_ref(),
+    {_, _, Object1} = Obj1 = make_test_object(Ref1),
+    {_, _, Object2} = Obj2 = make_test_object(Ref2),
+
+    #domain_conf_v2_CommitResponse{} =
+        commit_batch_insert([Obj1, Obj2]),
+
+    #domain_conf_v2_VersionedObject{
+        object = Result1
+    } = dmt_client:checkout_object(Ref1),
+    #domain_conf_v2_VersionedObject{
+        object = Result2
+    } = dmt_client:checkout_object(Ref2),
+    ?assertEqual(Object1, Result1),
+    ?assertEqual(Object2, Result2).
+
+-spec commit_conflict_handling(config()) -> _.
+commit_conflict_handling(_Config) ->
+    Ref = make_domain_ref(),
+    Object = make_test_object(Ref),
+    Version = commit_insert(Object),
+
+    % Try to insert object with same reference
+    Commit = #domain_conf_v2_Commit{
+        ops = [{insert, #domain_conf_v2_InsertOp{object = Object}}]
+    },
+    ?assertThrow(
+        #domain_conf_v2_OperationConflict{
+            conflict =
+                {object_already_exists, #domain_conf_v2_ObjectAlreadyExistsConflict{
+                    object_ref = Ref
+                }}
+        },
+        dmt_client:commit(Version, Commit, make_user_op_id())
+    ).
+
+-spec version_sequence_operations(config()) -> _.
+version_sequence_operations(_Config) ->
+    Ref = make_domain_ref(),
+    Object1 = make_test_object(Ref),
+
+    % First insert
+    Version1 = commit_insert(Object1),
+    Result1 = dmt_client:checkout_object(latest, Ref),
+    ?assertEqual(Object1, Result1),
+
+    % Update
+    Object2 = Object1#{name => <<"updated">>},
+    Version2 = commit_update(Version1, Object2),
+    ?assert(Version2 > Version1),
+    Result2 = dmt_client:checkout_object(latest, Ref),
+    ?assertEqual(Object2, Result2),
+
+    % Verify we can still get old version
+    Historical = dmt_client:checkout_object({version, Version1}, Ref),
+    ?assertEqual(Object1, Historical).
+
+%% Internal functions
+
+make_domain_ref() ->
+    {category, #domain_CategoryRef{id = rand:uniform(10000)}}.
+
+make_test_object({category, #domain_CategoryRef{id = ID}} = Ref) ->
+    Name = erlang:integer_to_binary(ID),
+    make_test_object(Ref, Name).
+
+make_test_object({category, CategoryRef} = FullRef, Name) ->
+    Category = #domain_Category{
+        name = Name,
+        description = <<"Test category">>
+    },
+    ReflessObject = {category, Category},
+    Object = {category, #domain_CategoryObject{ref = CategoryRef, data = Category}},
+    {FullRef, ReflessObject, Object}.
+
+make_user_op_id() ->
+    Params = #domain_conf_v2_UserOpParams{email = genlib:unique(), name = genlib:unique()},
+    #domain_conf_v2_UserOp{id = ID} =
+        dmt_client_user_op:create(Params, #{}),
+    ID.
+
+commit_insert({Ref, Object, _}) ->
+    % Get version from any existing object or start with 0
+    Op = {insert, #domain_conf_v2_InsertOp{object = Object, force_ref = Ref}},
+    Commit = #domain_conf_v2_Commit{ops = [Op]},
+    UserOpID = make_user_op_id(),
+    dmt_client:commit({version, 1}, Commit, UserOpID).
+
+commit_update(Version, Object) ->
+    Op = {update, #domain_conf_v2_UpdateOp{new_object = Object}},
+    Commit = #domain_conf_v2_Commit{ops = [Op]},
+    UserOpID = make_user_op_id(),
+    dmt_client:commit(Version, Commit, UserOpID).
+
+commit_remove(Version, Ref) ->
+    Op = {remove, #domain_conf_v2_RemoveOp{ref = Ref}},
+    Commit = #domain_conf_v2_Commit{ops = [Op]},
+    UserOpID = make_user_op_id(),
+    dmt_client:commit(Version, Commit, UserOpID).
+
+commit_batch_insert(Objects) ->
+    Version = 1,
+    Ops = [
+        {insert, #domain_conf_v2_InsertOp{
+            object = Obj,
+            force_ref = Ref
+        }}
+     || {Ref, Obj, _} <- Objects
+    ],
+    Commit = #domain_conf_v2_Commit{ops = Ops},
+    UserOpID = make_user_op_id(),
+    dmt_client:commit(Version, Commit, UserOpID).

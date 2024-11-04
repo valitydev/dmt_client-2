@@ -12,8 +12,8 @@
     dmt_client:opts()
 ) -> dmt_client:vsn() | no_return().
 
--callback checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
+-callback checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    {ok, dmsl_domain_conf_v2_thrift:'VersionedObject'()} | no_return().
 
 %%% API
 
@@ -26,10 +26,10 @@
 commit(Version, Commit, UserOpID, Opts) ->
     call(commit, [Version, Commit, UserOpID, Opts]).
 
--spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
-checkout_object(Reference, ObjectReference, Opts) ->
-    call(checkout_object, [Reference, ObjectReference, Opts]).
+-spec checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    {ok, dmsl_domain_conf_v2_thrift:'VersionedObject'()} | no_return().
+checkout_object(ObjectReference, VersionReference, Opts) ->
+    call(checkout_object, [ObjectReference, VersionReference, Opts]).
 
 %%% Internal functions
 

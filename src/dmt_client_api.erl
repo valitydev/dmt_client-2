@@ -10,13 +10,14 @@
     dmt_client:commit(),
     dmt_client:user_op_id(),
     dmt_client:opts()
-) -> dmt_client:vsn() | no_return().
+) ->
+    dmt_client:vsn() | no_return().
 commit(Version, Commit, UserOpID, Opts) ->
     call('Repository', 'Commit', {Version, Commit, UserOpID}, Opts).
 
--spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
-checkout_object(VersionRef, ObjectReference, Opts) ->
+-spec checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    {ok, dmsl_domain_conf_v2_thrift:'VersionedObject'()} | no_return().
+checkout_object(ObjectReference, VersionRef, Opts) ->
     call('RepositoryClient', 'CheckoutObject', {VersionRef, ObjectReference}, Opts).
 
 call(ServiceName, Function, Args, Opts) ->
@@ -32,17 +33,16 @@ call(ServiceName, Function, Args, Opts) ->
             )
         ),
 
-    CallOpts = #{
-        url => Url,
-        event_handler => get_event_handlers(),
-        transport_opts => TransportOpts
-    },
+    CallOpts =
+        #{
+            url => Url,
+            event_handler => get_event_handlers(),
+            transport_opts => TransportOpts
+        },
 
-    Context =
-        case maps:find(woody_context, Opts) of
-            error -> woody_context:new();
-            {ok, Ctx} -> Ctx
-        end,
+    Context = maps:get(woody_context, Opts, woody_context:new()),
+
+    io:format("Call, CallOpts, Context: ~p~n~p~n~p~n", [Call, CallOpts, Context]),
 
     case woody_client:call(Call, CallOpts, Context) of
         {ok, Response} ->

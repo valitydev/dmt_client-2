@@ -5,8 +5,7 @@
     {applications, [
         kernel,
         stdlib,
-        woody,
-        dmt_core
+        woody
     ]},
     {mod, {dmt_client, []}},
     {env, []}

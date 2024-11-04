@@ -1,40 +1,52 @@
 services:
+    testrunner:
+        image: $DEV_IMAGE_TAG
+        build:
+            dockerfile: Dockerfile.dev
+            context: .
+            args:
+                OTP_VERSION: $OTP_VERSION
+                THRIFT_VERSION: $THRIFT_VERSION
+        depends_on:
+            dmt:
+                condition: service_healthy
+        volumes:
+            - .:$PWD
+        working_dir: $PWD
+        command: /sbin/init
 
-  testrunner:
-    image: $DEV_IMAGE_TAG
-    build:
-      dockerfile: Dockerfile.dev
-      context: .
-      args:
-        OTP_VERSION: $OTP_VERSION
-        THRIFT_VERSION: $THRIFT_VERSION
-    depends_on:
-      dominant:
-        condition: service_healthy
-    volumes:
-      - .:$PWD
-    working_dir: $PWD
-    command: /sbin/init
+    dmt:
+        image: ghcr.io/valitydev/dominant-v2:sha-3ec8204
+        command: /opt/dmt/bin/dmt foreground
+        healthcheck:
+            test: "/opt/dmt/bin/dmt ping"
+            interval: 5s
+            timeout: 3s
+            retries: 12
+        ports:
+            - 8022:8022
+        hostname: dmt
+        environment:
+            POSTGRES_HOST: db
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: dmt
+        depends_on:
+            db:
+                condition: service_healthy
+        volumes:
+            - ./config/dominant/sys.config:/opt/dmt/releases/0.1/sys.config
 
-  dominant:
-    image: ghcr.io/valitydev/dominant-v2:master
-    command: /opt/dmt/bin/dmt foreground
-    healthcheck:
-      test: "/opt/dmt/bin/dmt ping"
-      interval: 5s
-      timeout: 3s
-      retries: 12
-
-  db:
-    image: postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: dmt
-    ports:
-      - 5432:5432
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    db:
+        image: postgres
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: dmt
+        ports:
+            - 5432:5432
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U postgres"]
+            interval: 5s
+            timeout: 5s
+            retries: 5

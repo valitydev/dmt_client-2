@@ -7,6 +7,7 @@
 -export([start_link/0]).
 
 -export([get_object/3]).
+-export([do_get_object/2]).
 
 %% gen_server callbacks
 
@@ -55,11 +56,12 @@
 
 -type from() :: {pid(), term()}.
 -type fetch_result() ::
-    {ok, dmt_client:snapshot()} | {error, version_not_found | woody_error() | {already_fetched, dmt_client:vsn()}}.
+    {ok, {dmt_client:base_version(), dmt_client:object_ref()}}
+    | {error, version_not_found | woody_error() | {already_fetched, dmt_client:vsn()}}.
 
 -type dispatch_fun() :: fun((from(), fetch_result()) -> any()).
 -type waiters() :: #{
-    dmt_client:ref() => [{from() | undefined, dispatch_fun()}]
+    {dmt_client:object_ref(), dmt_client:vsn()} => [{from() | undefined, dispatch_fun()}]
 }.
 
 -record(state, {
@@ -80,8 +82,9 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
--spec get_object(dmt_client:vsn(), dmt_client:object_ref(), dmt_client:opts()) ->
-    {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found | woody_error()}.
+-spec get_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    {ok, dmt_client:domain_object()}
+    | {error, version_not_found | object_not_found | woody_error()}.
 get_object(ObjectRef, Version, Opts) ->
     case ensure_object_version(ObjectRef, Version, Opts) of
         {ok, {ObjectRef, NewVersion}} -> do_get_object(ObjectRef, NewVersion);
@@ -162,7 +165,9 @@ call(Msg, Timeout) ->
         gen_server:call(?SERVER, Msg, Timeout)
     catch
         exit:{timeout, {gen_server, call, _}} ->
-            woody_error:raise(system, {external, resource_unavailable, <<"dmt_client_cache timeout">>})
+            woody_error:raise(
+                system, {external, resource_unavailable, <<"dmt_client_cache timeout">>}
+            )
     end.
 
 -spec cast(term()) -> ok.
@@ -254,7 +259,7 @@ schedule_fetch(ObjectRef, VersionReference, Opts) ->
 
 fetch(VersionReference, ObjectRef, Opts) ->
     try
-        dmt_client_backend:checkout_object(VersionReference, ObjectRef, Opts)
+        dmt_client_backend:checkout_object(ObjectRef, VersionReference, Opts)
     catch
         throw:#domain_conf_v2_VersionNotFound{} ->
             {error, version_not_found};
@@ -281,9 +286,9 @@ cleanup([], _Config) ->
 cleanup([Head | Rest], Config) ->
     ObjectCount = get_objects_count(),
     MemoryUsage = get_objects_memory_usage(),
-    MaxSnapshots = maps:get(max_objects, Config),
+    MaxObjects = maps:get(max_objects, Config),
     MaxMemory = maps:get(max_memory, Config),
-    case ObjectCount > MaxSnapshots orelse (ObjectCount > 1 andalso MemoryUsage > MaxMemory) of
+    case ObjectCount > MaxObjects orelse (ObjectCount > 1 andalso MemoryUsage > MaxMemory) of
         true ->
             ok = remove_obj(Head),
             cleanup(Rest, Config);
@@ -377,7 +382,7 @@ test_basic_caching() ->
     meck:expect(
         dmt_client_backend,
         checkout_object,
-        fun(VersionRef, ObjRef, _Opts) ->
+        fun(ObjRef, VersionRef, _Opts) ->
             ?assertEqual(Version, VersionRef),
             ?assertEqual(?TEST_REF, ObjRef),
             {ok, ?TEST_VERSIONED_OBJ(1)}
@@ -400,7 +405,7 @@ test_size_limits() ->
     meck:expect(
         dmt_client_backend,
         checkout_object,
-        fun({version, Ver}, _ObjRef, _Opts) ->
+        fun(_ObjRef, {version, Ver}, _Opts) ->
             {ok, ?TEST_VERSIONED_OBJ(Ver)}
         end
     ),
@@ -421,7 +426,7 @@ test_last_access() ->
     meck:expect(
         dmt_client_backend,
         checkout_object,
-        fun({version, Ver}, _ObjRef, _Opts) ->
+        fun(_ObjRef, {version, Ver}, _Opts) ->
             {ok, ?TEST_VERSIONED_OBJ(Ver)}
         end
     ),
@@ -449,7 +454,7 @@ test_missing_object() ->
     meck:expect(
         dmt_client_backend,
         checkout_object,
-        fun(_VersionRef, _ObjRef, _Opts) ->
+        fun(_ObjRef, _VersionRef, _Opts) ->
             throw(#domain_conf_v2_ObjectNotFound{})
         end
     ),
@@ -462,7 +467,7 @@ test_concurrent_access() ->
     meck:expect(
         dmt_client_backend,
         checkout_object,
-        fun(_VersionRef, _ObjRef, _Opts) ->
+        fun(_ObjRef, _VersionRef, _Opts) ->
             % Simulate slow backend
             timer:sleep(100),
             {ok, ?TEST_VERSIONED_OBJ(1)}
