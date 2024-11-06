@@ -17,15 +17,6 @@
     create_duplicate_email/1
 ]).
 
--define(DEFAULT_CONFIG, #{
-    service_urls =>
-        #{
-            'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
-            'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>,
-            'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
-        }
-}).
-
 -type config() :: ct_suite:ct_config().
 
 %% CT callbacks
@@ -48,6 +39,7 @@ groups() ->
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
     Apps = start_dmt_client(),
+    % ok = application:get_all_env(dmt_client),
     [{apps, Apps} | Config].
 
 -spec end_per_suite(config()) -> ok.

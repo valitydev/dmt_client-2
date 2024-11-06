@@ -24,14 +24,6 @@
 
 -type config() :: ct_suite:ct_config().
 
--define(DEFAULT_CONFIG, #{
-    service_urls => #{
-        'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-        'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>,
-        'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
-    }
-}).
-
 %% CT callbacks
 
 -spec all() -> [{group, atom()}].
@@ -287,8 +279,15 @@ create_large_binary(Size) ->
 
 -spec start_dmt_client(map()) -> [atom()].
 start_dmt_client(ExtraConfig) ->
-    Config = maps:merge(?DEFAULT_CONFIG, ExtraConfig),
-    genlib_app:start_application_with(dmt_client, maps:to_list(Config)).
+    Config = [
+        ExtraConfig
+        | {service_urls, #{
+            'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
+            'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>,
+            'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
+        }}
+    ],
+    genlib_app:start_application_with(dmt_client, Config).
 
 -spec stop_dmt_client(config()) -> ok.
 stop_dmt_client(Config) ->

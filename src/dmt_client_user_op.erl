@@ -77,13 +77,18 @@ get_service_url(ServiceName) ->
         undefined ->
             error({config_missing, service_urls});
         Config when is_map(Config) ->
-            maps:get(ServiceName, Config, error({service_url_missing, ServiceName}))
+            case maps:get(ServiceName, Config, undefined) of
+                undefined ->
+                    error({service_url_missing, ServiceName});
+                Url ->
+                    Url
+            end
     end.
 
 get_service_modname(ServiceName) ->
     {get_service_module(ServiceName), ServiceName}.
 
-get_service_module('RepositoryClient') ->
+get_service_module('UserOpManagement') ->
     dmsl_domain_conf_v2_thrift.
 
 get_event_handlers() ->
