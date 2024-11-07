@@ -50,23 +50,23 @@ groups() ->
 
 -spec init_per_group(atom(), config()) -> config().
 init_per_group(cache_tests, Config) ->
-    Apps = start_dmt_client(#{
-        max_cache_size => #{
+    Apps = start_dmt_client(
+        {max_cache_size, #{
             elements => 2,
             % 50MB - large enough to not interfere
             memory => 52428800
-        }
-    }),
+        }}
+    ),
     [{apps, Apps} | Config];
 init_per_group(memory_limits, Config) ->
-    Apps = start_dmt_client(#{
-        max_cache_size => #{
+    Apps = start_dmt_client(
+        {max_cache_size, #{
             % Large enough to not interfere
             elements => 20,
             % 2KB - for testing memory limits
             memory => 2048
-        }
-    }),
+        }}
+    ),
     [{apps, Apps} | Config].
 
 -spec end_per_group(atom(), config()) -> any().
@@ -107,6 +107,10 @@ cache_size_limits(_Config) ->
         end
      || {Ref, _, Obj} = Object <- Objects
     ],
+
+    {Ref, LV, Obj} = make_test_object(make_domain_ref()),
+    #domain_conf_v2_CommitResponse{version = LV} =
+        commit_insert(Object),
 
     % Access all objects to ensure they're cached
     [dmt_client:checkout_object({version, Version}, Ref) || {Ref, Version, _} <- VersionedObjects],
@@ -287,6 +291,7 @@ start_dmt_client(ExtraConfig) ->
             'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
         }}
     ],
+    ct:pal("~p", Config),
     genlib_app:start_application_with(dmt_client, Config).
 
 -spec stop_dmt_client(config()) -> ok.

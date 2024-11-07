@@ -38,9 +38,10 @@ groups() ->
 
 -spec init_per_suite(config()) -> config().
 init_per_suite(Config) ->
-    Apps = start_dmt_client(),
+    Apps0 = genlib_app:start_application(woody),
+    Apps1 = start_dmt_client(),
     % ok = application:get_all_env(dmt_client),
-    [{apps, Apps} | Config].
+    [{apps, Apps0 ++ Apps1} | Config].
 
 -spec end_per_suite(config()) -> ok.
 end_per_suite(Config) ->
@@ -113,7 +114,10 @@ create_duplicate_email(_Config) ->
 
     % Try to create another user op with same email
     Params2 = #domain_conf_v2_UserOpParams{email = Email, name = generate_name()},
-    ?assertThrow({woody_error, _}, dmt_client_user_op:create(Params2, #{})).
+    ?assertThrow(
+        #domain_conf_v2_UserAlreadyExists{},
+        dmt_client_user_op:create(Params2, #{})
+    ).
 
 %% Internal functions
 

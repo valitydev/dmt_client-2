@@ -92,4 +92,4 @@ get_service_module('UserOpManagement') ->
     dmsl_domain_conf_v2_thrift.
 
 get_event_handlers() ->
-    genlib_app:env(dmt_client, woody_event_handlers, []).
+    genlib_app:env(dmt_client, woody_event_handlers, [woody_event_handler_default]).
