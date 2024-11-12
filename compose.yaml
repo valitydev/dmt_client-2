@@ -16,7 +16,7 @@ services:
         command: /sbin/init
 
     dmt:
-        image: ghcr.io/valitydev/dominant-v2:sha-9961c75-epic-fixes_for_client
+        image: ghcr.io/valitydev/dominant-v2:sha-ba178b3-epic-fixes_for_client
         command: /opt/dmt/bin/dmt foreground
         healthcheck:
             test: "/opt/dmt/bin/dmt ping"
@@ -34,8 +34,8 @@ services:
         depends_on:
             db:
                 condition: service_healthy
-        # volumes:
-        #     - ./config/dominant/sys.config:/opt/dmt/releases/0.1/sys.config
+        volumes:
+            - ./config/dominant/sys.config:/opt/dmt/releases/0.1/sys.config
 
     db:
         image: postgres

@@ -12,4 +12,4 @@ log
 Makefile.env
 
 
-_build
+/_build/*

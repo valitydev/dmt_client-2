@@ -33,7 +33,9 @@
 -export_type([vsn_created_at/0]).
 -export_type([version/0]).
 -export_type([base_version/0]).
+-export_type([versioned_object/0]).
 -export_type([commit/0]).
+-export_type([commit_response/0]).
 -export_type([object_ref/0]).
 -export_type([domain_object/0]).
 -export_type([opts/0]).
@@ -50,7 +52,9 @@
 -type base_version() :: non_neg_integer().
 -type commit() :: dmsl_domain_conf_v2_thrift:'Commit'().
 -type object_ref() :: dmsl_domain_thrift:'Reference'().
+-type versioned_object() :: dmsl_domain_conf_v2_thrift:'VersionedObject'().
 -type domain_object() :: dmsl_domain_thrift:'ReflessDomainObject'().
+-type commit_response() :: dmsl_domain_conf_v2_thrift:'CommitResponse'().
 -type opts() :: #{
     transport_opts => woody_client_thrift_http_transport:transport_options(),
     woody_context => woody_context:ctx()
@@ -62,15 +66,15 @@
 
 %%% API
 
--spec checkout_object(object_ref()) -> domain_object() | no_return().
+-spec checkout_object(object_ref()) -> versioned_object() | no_return().
 checkout_object(ObjectReference) ->
     checkout_object(ObjectReference, latest).
 
--spec checkout_object(object_ref(), version()) -> domain_object() | no_return().
+-spec checkout_object(object_ref(), version()) -> versioned_object() | no_return().
 checkout_object(ObjectReference, Reference) ->
     checkout_object(ObjectReference, Reference, #{}).
 
--spec checkout_object(object_ref(), version(), opts()) -> domain_object() | no_return().
+-spec checkout_object(object_ref(), version(), opts()) -> versioned_object() | no_return().
 checkout_object(ObjectReference, Reference, Opts) ->
     unwrap(do_checkout_object(ObjectReference, Reference, Opts)).
 
@@ -78,11 +82,11 @@ do_checkout_object(ObjectReference, Reference, Opts) ->
     Version = ref_to_version(Reference),
     dmt_client_cache:get_object(ObjectReference, Version, Opts).
 
--spec commit(vsn(), commit(), user_op_id()) -> vsn() | no_return().
+-spec commit(base_version(), commit(), user_op_id()) -> commit_response() | no_return().
 commit(Version, Commit, UserOpID) ->
     commit(Version, Commit, UserOpID, #{}).
 
--spec commit(vsn(), commit(), user_op_id(), opts()) -> vsn() | no_return().
+-spec commit(base_version(), commit(), user_op_id(), opts()) -> commit_response() | no_return().
 commit(Version, Commit, UserOpID, Opts) ->
     dmt_client_backend:commit(Version, Commit, UserOpID, Opts).
 

@@ -40,10 +40,10 @@
 -type timestamp() :: integer().
 
 -record(object, {
-    id :: {dmt_client:object_ref(), dmt_client:object_ref()},
+    id :: {dmt_client:object_ref(), dmt_client:vsn()},
     vsn :: dmt_client:vsn(),
     ref :: dmt_client:object_ref() | ets_match(),
-    obj :: dmt_client:domain_object() | ets_match(),
+    obj :: dmt_client:versioned_object() | ets_match(),
     created_at :: dmt_client:vsn_created_at(),
     last_access :: timestamp()
 }).
@@ -83,7 +83,7 @@ start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 -spec get_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
-    {ok, dmt_client:domain_object()}
+    {ok, dmt_client:versioned_object()}
     | {error, version_not_found | object_not_found | woody_error()}.
 get_object(ObjectRef, Version, Opts) ->
     case ensure_object_version(ObjectRef, Version, Opts) of
@@ -104,10 +104,8 @@ handle_call({fetch_object_version, ObjectRef, Version, Opts}, From, State) ->
     % Check if object appeared between call and handle
     case ets:member(?TABLE, {ObjectRef, Version}) of
         true ->
-            io:format("object appeared: ~p~n", [{ObjectRef, Version}]),
             {reply, {ok, {ObjectRef, Version}}, State};
         false ->
-            io:format("object didn't appear: ~p~n", [{ObjectRef, Version}]),
             {noreply, fetch_by_reference(ObjectRef, Version, From, Opts, State)}
     end;
 handle_call(_Msg, _From, State) ->
@@ -115,7 +113,6 @@ handle_call(_Msg, _From, State) ->
 
 -spec handle_cast(term(), state()) -> {noreply, state()}.
 handle_cast({dispatch, Reference, Result}, #state{waiters = Waiters} = State) ->
-    io:format("dispatch Reference: ~pn Result: ~p~n", [Reference, Result]),
     _ = [DispatchFun(From, Result) || {From, DispatchFun} <- maps:get(Reference, Waiters, [])],
     {noreply, State#state{waiters = maps:remove(Reference, Waiters)}};
 handle_cast(cleanup, State) ->
@@ -174,17 +171,18 @@ call(Msg, Timeout) ->
 cast(Msg) ->
     gen_server:cast(?SERVER, Msg).
 
+ensure_object_version(ObjectRef, #domain_conf_v2_Head{}, Opts) ->
+    call({fetch_object_version, ObjectRef, #domain_conf_v2_Head{}, Opts});
 ensure_object_version(ObjectRef, Version, Opts) ->
     case ets:member(?TABLE, {ObjectRef, Version}) of
         true ->
             {ok, {ObjectRef, Version}};
         false ->
-            io:format("couldn't find: ~p", [{ObjectRef, Version}]),
             call({fetch_object_version, ObjectRef, Version, Opts})
     end.
 
--spec do_get_object(dmt_client:vsn(), dmt_client:object_ref()) ->
-    {ok, dmt_client:domain_object()} | {error, version_not_found | object_not_found}.
+-spec do_get_object(dmt_client:object_ref(), dmt_client:vsn()) ->
+    {ok, dmt_client:versioned_object()} | {error, version_not_found | object_not_found}.
 do_get_object(ObjectRef, Version) ->
     case ets:lookup(?TABLE, {ObjectRef, Version}) of
         [#object{obj = Object}] ->
@@ -338,6 +336,15 @@ timestamp() ->
     created_at = <<"2024-01-01T00:00:00Z">>
 }).
 
+-dialyzer({nowarn_function, dmt_cache_test_/0}).
+-dialyzer({nowarn_function, test_setup/0}).
+-dialyzer({nowarn_function, test_cleanup/1}).
+-dialyzer({nowarn_function, test_basic_caching/0}).
+-dialyzer({nowarn_function, test_size_limits/0}).
+-dialyzer({nowarn_function, test_last_access/0}).
+-dialyzer({nowarn_function, test_missing_object/0}).
+-dialyzer({nowarn_function, test_concurrent_access/0}).
+
 %%
 %% Test Cases
 %%
@@ -384,13 +391,13 @@ test_basic_caching() ->
         fun(ObjRef, VersionRef, _Opts) ->
             ?assertEqual(Version, VersionRef),
             ?assertEqual(?TEST_REF, ObjRef),
-            {ok, ?TEST_VERSIONED_OBJ(1)}
+            ?TEST_VERSIONED_OBJ(1)
         end
     ),
 
     % First access should fetch from backend
     {ok, Object} = dmt_client_cache:get_object(?TEST_REF, Version, #{}),
-    ?assertEqual(?TEST_OBJ(1), Object),
+    ?assertEqual(?TEST_VERSIONED_OBJ(1), Object),
 
     % Second access should come from cache
     {ok, CachedObject} = dmt_client_cache:get_object(?TEST_REF, Version, #{}),
@@ -405,7 +412,7 @@ test_size_limits() ->
         dmt_client_backend,
         checkout_object,
         fun(_ObjRef, {version, Ver}, _Opts) ->
-            {ok, ?TEST_VERSIONED_OBJ(Ver)}
+            ?TEST_VERSIONED_OBJ(Ver)
         end
     ),
 
@@ -426,7 +433,7 @@ test_last_access() ->
         dmt_client_backend,
         checkout_object,
         fun(_ObjRef, {version, Ver}, _Opts) ->
-            {ok, ?TEST_VERSIONED_OBJ(Ver)}
+            ?TEST_VERSIONED_OBJ(Ver)
         end
     ),
 
@@ -469,7 +476,7 @@ test_concurrent_access() ->
         fun(_ObjRef, _VersionRef, _Opts) ->
             % Simulate slow backend
             timer:sleep(100),
-            {ok, ?TEST_VERSIONED_OBJ(1)}
+            ?TEST_VERSIONED_OBJ(1)
         end
     ),
 
@@ -494,7 +501,7 @@ test_concurrent_access() ->
 
     % All results should be successful and identical
     [FirstResult | RestResults] = Results,
-    ?assertEqual({ok, ?TEST_OBJ(1)}, FirstResult),
+    ?assertEqual({ok, ?TEST_VERSIONED_OBJ(1)}, FirstResult),
     ?assertEqual(lists:duplicate(length(RestResults), FirstResult), RestResults),
 
     % Backend should be called only once

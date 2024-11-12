@@ -63,8 +63,6 @@ call(ServiceName, Function, Args, Opts) ->
 
     Context = maps:get(woody_context, Opts, woody_context:new()),
 
-    io:format("Call, CallOpts, Context: ~p~n~p~n~p~n", [Call, CallOpts, Context]),
-
     case woody_client:call(Call, CallOpts, Context) of
         {ok, Response} ->
             Response;

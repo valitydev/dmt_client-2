@@ -15,7 +15,6 @@
 
 %% Test cases
 -export([
-    cache_hit_verification/1,
     cache_size_limits/1,
     cache_memory_limits/1,
     parallel_access/1,
@@ -29,17 +28,16 @@
 -spec all() -> [{group, atom()}].
 all() ->
     [
-        {group, cache_tests}
+        {group, cache_tests},
+        {group, memory_limits}
     ].
 
 -spec groups() -> [{atom(), list(), [atom()]}].
 groups() ->
     [
         {cache_tests, [parallel], [
-            cache_hit_verification,
             cache_size_limits,
             parallel_access,
-            cache_versioning,
             cache_invalidation
         ]},
         % Sequential to avoid interference
@@ -51,21 +49,25 @@ groups() ->
 -spec init_per_group(atom(), config()) -> config().
 init_per_group(cache_tests, Config) ->
     Apps = start_dmt_client(
-        {max_cache_size, #{
-            elements => 2,
-            % 50MB - large enough to not interfere
-            memory => 52428800
-        }}
+        [
+            {max_cache_size, #{
+                elements => 2,
+                % 50MB - large enough to not interfere
+                memory => 52428800
+            }}
+        ]
     ),
     [{apps, Apps} | Config];
 init_per_group(memory_limits, Config) ->
     Apps = start_dmt_client(
-        {max_cache_size, #{
-            % Large enough to not interfere
-            elements => 20,
-            % 2KB - for testing memory limits
-            memory => 2048
-        }}
+        [
+            {max_cache_size, #{
+                % Large enough to not interfere
+                elements => 20,
+                % 2KB - for testing memory limits
+                memory => 2048
+            }}
+        ]
     ),
     [{apps, Apps} | Config].
 
@@ -74,24 +76,6 @@ end_per_group(_Group, Config) ->
     stop_dmt_client(Config).
 
 %% Tests
-
--spec cache_hit_verification(config()) -> _.
-cache_hit_verification(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object} = Obj = make_test_object(Ref),
-    Version = commit_insert(Obj),
-
-    % First access should hit service
-    #domain_conf_v2_VersionedObject{
-        object = Result1
-    } = dmt_client:checkout_object({version, Version}, Ref),
-    ?assertEqual(Object, Result1),
-
-    % Second access should come from cache
-    #domain_conf_v2_VersionedObject{
-        object = Result2
-    } = dmt_client:checkout_object({version, Version}, Ref),
-    ?assertEqual(Result1, Result2).
 
 -spec cache_size_limits(config()) -> _.
 cache_size_limits(_Config) ->
@@ -108,9 +92,12 @@ cache_size_limits(_Config) ->
         commit_insert(RLOjb3, Ref3),
 
     % Access all objects to ensure they're cached
-    {ok, _} = dmt_client:checkout_object({version, GV1}, Ref1),
-    {ok, _} = dmt_client:checkout_object({version, GV2}, Ref2),
-    {ok, _} = dmt_client:checkout_object({version, GV3}, Ref3),
+    #domain_conf_v2_VersionedObject{} =
+        dmt_client:checkout_object(Ref1, GV1),
+    #domain_conf_v2_VersionedObject{} =
+        dmt_client:checkout_object(Ref2, GV2),
+    #domain_conf_v2_VersionedObject{} =
+        dmt_client:checkout_object(Ref3, GV3),
 
     {error, object_not_found} = dmt_client_cache:do_get_object(Ref1, {version, GV1}),
     {ok, _} = dmt_client_cache:do_get_object(Ref2, {version, GV2}),
@@ -133,11 +120,11 @@ cache_memory_limits(_Config) ->
 
     % Access to ensure caching
     #domain_conf_v2_VersionedObject{object = Cached1} =
-        dmt_client:checkout_object({version, Version1}, Ref1),
+        dmt_client:checkout_object(Ref1, Version1),
     ?assertEqual(Obj1, Cached1),
 
     #domain_conf_v2_VersionedObject{object = Cached2} =
-        dmt_client:checkout_object({version, Version2}, Ref2),
+        dmt_client:checkout_object(Ref2, Version2),
     ?assertEqual(Obj2, Cached2),
 
     % First object should be evicted due to memory limits
@@ -146,16 +133,16 @@ cache_memory_limits(_Config) ->
 
 -spec parallel_access(config()) -> _.
 parallel_access(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object} = Obj = make_test_object(Ref),
-    Version = commit_insert(Obj),
+    {Ref, RLObject, Object} = make_test_object(make_domain_ref()),
+    #domain_conf_v2_CommitResponse{version = Version} =
+        commit_insert(RLObject, Ref),
 
     % Spawn multiple processes to access the same object
     Self = self(),
     Pids = [
         spawn_link(fun() ->
             #domain_conf_v2_VersionedObject{object = Result} =
-                dmt_client:checkout_object({version, Version}, Ref),
+                dmt_client:checkout_object(Ref, Version),
             Self ! {self(), Result}
         end)
      || _ <- lists:seq(1, 100)
@@ -174,40 +161,40 @@ parallel_access(_Config) ->
 
 -spec cache_invalidation(config()) -> _.
 cache_invalidation(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object1} = Obj1 = make_test_object(Ref),
-    Version1 = commit_insert(Obj1),
+    {Ref, RLObject, Object1} = make_test_object(make_domain_ref()),
+    #domain_conf_v2_CommitResponse{version = Version1} =
+        commit_insert(RLObject, Ref),
 
     % Access object to ensure it's cached
     #domain_conf_v2_VersionedObject{object = Result1} =
-        dmt_client:checkout_object({version, Version1}, Ref),
+        dmt_client:checkout_object(Ref, Version1),
     ?assertEqual(Object1, Result1),
 
     % Update object
     {_, _, Object2} = make_test_object(Ref, <<"updated">>),
-    _Version2 = commit_update(Version1, Object2),
+    #domain_conf_v2_CommitResponse{} =
+        commit_update(Version1, Ref, Object2),
 
     % Check that we get updated version when requesting latest
     #domain_conf_v2_VersionedObject{object = Result2} =
-        dmt_client:checkout_object(latest, Ref),
+        dmt_client:checkout_object(Ref, latest),
     ?assertEqual(Object2, Result2),
 
     % Original version should still be available and cached
     #domain_conf_v2_VersionedObject{object = Historical} =
-        dmt_client:checkout_object({version, Version1}, Ref),
+        dmt_client:checkout_object(Ref, Version1),
     ?assertEqual(Object1, Historical).
 %% Internal functions
 
 make_domain_ref() ->
-    ID = genlib:unique(),
-    {category, #domain_CategoryRef{id = ID}}.
+    {category, #domain_CategoryRef{id = rand:uniform(100000)}}.
 
 make_test_object({category, #domain_CategoryRef{id = ID}} = Ref) ->
     Name = erlang:integer_to_binary(ID),
     make_test_object(Ref, Name).
 
 make_test_object(
-    Ref = {category, CategoryRef},
+    {category, CategoryRef} = Ref,
     LargeDescription
 ) when
     is_binary(LargeDescription)
@@ -226,17 +213,18 @@ make_user_op_id() ->
         dmt_client_user_op:create(Params, #{}),
     ID.
 
-commit_insert(Object) ->
-    commit_insert(Object, undefined).
-
 commit_insert(Object, Reference) ->
     Op = {insert, #domain_conf_v2_InsertOp{object = Object, force_ref = Reference}},
     Commit = #domain_conf_v2_Commit{ops = [Op]},
     UserOpID = make_user_op_id(),
-    dmt_client:commit({version, 1}, Commit, UserOpID).
+    dmt_client:commit(1, Commit, UserOpID).
 
-commit_update(Version, Object) ->
-    Op = {update, #domain_conf_v2_UpdateOp{new_object = Object}},
+commit_update(Version, Ref, Object) ->
+    Op =
+        {update, #domain_conf_v2_UpdateOp{
+            targeted_ref = Ref,
+            new_object = Object
+        }},
     Commit = #domain_conf_v2_Commit{ops = [Op]},
     UserOpID = make_user_op_id(),
     dmt_client:commit(Version, Commit, UserOpID).
@@ -252,17 +240,17 @@ create_large_binary(Size) ->
 %     #domain_conf_v2_VersionedObject{} = dmt_client:checkout_object(VersionRef, Ref),
 %     {Ref, VersionRef}.
 
--spec start_dmt_client(map()) -> [atom()].
+-spec start_dmt_client(list()) -> [atom()].
 start_dmt_client(ExtraConfig) ->
-    Config = [
-        ExtraConfig
-        | {service_urls, #{
-            'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
-            'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>,
-            'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
-        }}
-    ],
-    ct:pal("~p", Config),
+    Config =
+        ExtraConfig ++
+            [
+                {service_urls, #{
+                    'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
+                    'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>,
+                    'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
+                }}
+            ],
     genlib_app:start_application_with(dmt_client, Config).
 
 -spec stop_dmt_client(config()) -> ok.

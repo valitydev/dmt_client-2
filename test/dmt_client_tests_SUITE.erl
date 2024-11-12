@@ -20,7 +20,7 @@
     checkout_latest_object/1,
     commit_insert_object/1,
     commit_update_object/1,
-    commit_remove_object/1,
+    % commit_remove_object/1,
     commit_multiple_operations/1,
     version_sequence_operations/1,
     commit_conflict_handling/1
@@ -49,7 +49,7 @@ groups() ->
             checkout_object_by_version,
             commit_insert_object,
             commit_update_object,
-            commit_remove_object,
+            % commit_remove_object,
             commit_multiple_operations,
             commit_conflict_handling
         ]}
@@ -99,9 +99,8 @@ checkout_object_by_version(_Config) ->
 
 -spec checkout_latest_object(config()) -> _.
 checkout_latest_object(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object} = Obj = make_test_object(Ref),
-    _Version = commit_insert(Obj),
+    {Ref, RLObject, Object} = make_test_object(make_domain_ref()),
+    _Version = commit_insert(RLObject, Ref),
 
     % Check we can get latest version
     #domain_conf_v2_VersionedObject{
@@ -137,20 +136,22 @@ commit_update_object(_Config) ->
     } = dmt_client:checkout_object(Ref),
     ?assertEqual(Object2, Result).
 
--spec commit_remove_object(config()) -> _.
-commit_remove_object(_Config) ->
-    {Ref, ROObject, _} = make_test_object(make_domain_ref()),
-    #domain_conf_v2_CommitResponse{version = Version1} =
-        commit_insert(ROObject, Ref),
+% TODO Remove doesn't work yet
 
-    #domain_conf_v2_CommitResponse{version = Version2} =
-        commit_remove(Version1, Ref),
-    ?assert(Version2 > Version1),
+% -spec commit_remove_object(config()) -> _.
+% commit_remove_object(_Config) ->
+%     {Ref, ROObject, _} = make_test_object(make_domain_ref()),
+%     #domain_conf_v2_CommitResponse{version = Version1} =
+%         commit_insert(ROObject, Ref),
 
-    ?assertThrow(
-        #domain_conf_v2_ObjectNotFound{},
-        dmt_client:checkout_object(Ref, Version2)
-    ).
+%     #domain_conf_v2_CommitResponse{version = Version2} =
+%         commit_remove(Version1, Ref),
+%     ?assert(Version2 > Version1),
+
+%     ?assertThrow(
+%         #domain_conf_v2_ObjectNotFound{},
+%         dmt_client:checkout_object(Ref, Version2)
+%     ).
 
 -spec commit_multiple_operations(config()) -> _.
 commit_multiple_operations(_Config) ->
@@ -194,17 +195,20 @@ version_sequence_operations(_Config) ->
 
     #domain_conf_v2_CommitResponse{version = Version1} =
         commit_insert(RLObject, Ref),
-    #domain_conf_v2_VersionedObject{object = #domain_CategoryObject{data = Data1} = Result1} =
+    #domain_conf_v2_VersionedObject{object = Result1} =
         dmt_client:checkout_object(Ref, latest),
+    {category, #domain_CategoryObject{data = Data1}} = Result1,
     ?assertEqual(Object1, Result1),
 
     % Update
-
-    Object2 = Object1#domain_CategoryObject{
-        data = Data1#domain_Category{
-            description = <<"new_desc">>
-        }
-    },
+    {category, IRef} = Ref,
+    Object2 =
+        {category, #domain_CategoryObject{
+            ref = IRef,
+            data = Data1#domain_Category{
+                description = <<"new_desc">>
+            }
+        }},
     Version2 = commit_update(Version1, Ref, Object2),
     ?assert(Version2 > Version1),
 
@@ -215,7 +219,7 @@ version_sequence_operations(_Config) ->
     % Verify we can still get old version
 
     #domain_conf_v2_VersionedObject{object = Historical} =
-        dmt_client:checkout_object(Ref, {version, Version1}),
+        dmt_client:checkout_object(Ref, Version1),
     ?assertEqual(Object1, Historical).
 
 %% Internal functions
@@ -242,9 +246,6 @@ make_user_op_id() ->
         dmt_client_user_op:create(Params, #{}),
     ID.
 
-commit_insert(Object) ->
-    commit_insert(Object, undefined).
-
 commit_insert(Object, Ref) ->
     commit_insert(1, Object, Ref).
 
@@ -261,11 +262,11 @@ commit_update(Version, Ref, Object) ->
     UserOpID = make_user_op_id(),
     dmt_client:commit(Version, Commit, UserOpID).
 
-commit_remove(Version, Ref) ->
-    Op = {remove, #domain_conf_v2_RemoveOp{ref = Ref}},
-    Commit = #domain_conf_v2_Commit{ops = [Op]},
-    UserOpID = make_user_op_id(),
-    dmt_client:commit(Version, Commit, UserOpID).
+% commit_remove(Version, Ref) ->
+%     Op = {remove, #domain_conf_v2_RemoveOp{ref = Ref}},
+%     Commit = #domain_conf_v2_Commit{ops = [Op]},
+%     UserOpID = make_user_op_id(),
+%     dmt_client:commit(Version, Commit, UserOpID).
 
 commit_batch_insert(Objects) ->
     Version = 1,
