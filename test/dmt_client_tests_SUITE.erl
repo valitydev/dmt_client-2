@@ -64,8 +64,8 @@ init_per_suite(Config) ->
             memory => 52428800
         }},
         {service_urls, #{
-            'Repository' => <<"http://dominant:8022/v1/domain/repository">>,
-            'RepositoryClient' => <<"http://dominant:8022/v1/domain/repository_client">>,
+            'Repository' => <<"http://dmt:8022/v1/domain/repository">>,
+            'RepositoryClient' => <<"http://dmt:8022/v1/domain/repository_client">>,
             'UserOpManagement' => <<"http://dmt:8022/v1/domain/user_op">>
         }}
     ]),
@@ -87,15 +87,14 @@ checkout_nonexistent_object(_Config) ->
 
 -spec checkout_object_by_version(config()) -> _.
 checkout_object_by_version(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object} = Obj = make_test_object(Ref),
-    Version = commit_insert(Obj),
+    {Ref, RLObject, Object} = make_test_object(make_domain_ref()),
+    #domain_conf_v2_CommitResponse{version = Version} =
+        commit_insert(RLObject, Ref),
 
     % Check we can get object by specific version
-    VersionRef = {version, Version},
     #domain_conf_v2_VersionedObject{
         object = Result
-    } = dmt_client:checkout_object(VersionRef, Ref),
+    } = dmt_client:checkout_object(Ref, Version),
     ?assertEqual(Object, Result).
 
 -spec checkout_latest_object(config()) -> _.
@@ -107,15 +106,14 @@ checkout_latest_object(_Config) ->
     % Check we can get latest version
     #domain_conf_v2_VersionedObject{
         object = Result
-    } = dmt_client:checkout_object(latest, Ref),
+    } = dmt_client:checkout_object(Ref, latest),
     ?assertEqual(Object, Result).
 
 -spec commit_insert_object(config) -> _.
 commit_insert_object(_Config) ->
-    Ref = make_domain_ref(),
-    {_, _, Object} = Obj = make_test_object(Ref),
+    {Ref, ROObject, Object} = make_test_object(make_domain_ref()),
     #domain_conf_v2_CommitResponse{version = Version} =
-        commit_insert(Obj),
+        commit_insert(ROObject, Ref),
     ?assert(is_integer(Version)),
 
     #domain_conf_v2_VersionedObject{
@@ -125,14 +123,13 @@ commit_insert_object(_Config) ->
 
 -spec commit_update_object(config()) -> _.
 commit_update_object(_Config) ->
-    Ref = make_domain_ref(),
-    Obj = make_test_object(Ref),
+    {Ref, ROObject, _} = make_test_object(make_domain_ref()),
     #domain_conf_v2_CommitResponse{version = Version1} =
-        commit_insert(Obj),
+        commit_insert(ROObject, Ref),
 
     {_, _, Object2} = make_test_object(Ref, <<"new_name">>),
     #domain_conf_v2_CommitResponse{version = Version2} =
-        commit_update(Version1, Object2),
+        commit_update(Version1, Ref, Object2),
     ?assert(Version2 > Version1),
 
     #domain_conf_v2_VersionedObject{
@@ -142,10 +139,9 @@ commit_update_object(_Config) ->
 
 -spec commit_remove_object(config()) -> _.
 commit_remove_object(_Config) ->
-    Ref = make_domain_ref(),
-    Obj = make_test_object(Ref),
+    {Ref, ROObject, _} = make_test_object(make_domain_ref()),
     #domain_conf_v2_CommitResponse{version = Version1} =
-        commit_insert(Obj),
+        commit_insert(ROObject, Ref),
 
     #domain_conf_v2_CommitResponse{version = Version2} =
         commit_remove(Version1, Ref),
@@ -153,15 +149,13 @@ commit_remove_object(_Config) ->
 
     ?assertThrow(
         #domain_conf_v2_ObjectNotFound{},
-        dmt_client:checkout_object(Ref)
+        dmt_client:checkout_object(Ref, Version2)
     ).
 
 -spec commit_multiple_operations(config()) -> _.
 commit_multiple_operations(_Config) ->
-    Ref1 = make_domain_ref(),
-    Ref2 = make_domain_ref(),
-    {_, _, Object1} = Obj1 = make_test_object(Ref1),
-    {_, _, Object2} = Obj2 = make_test_object(Ref2),
+    {Ref1, _, Object1} = Obj1 = make_test_object(make_domain_ref()),
+    {Ref2, _, Object2} = Obj2 = make_test_object(make_domain_ref()),
 
     #domain_conf_v2_CommitResponse{} =
         commit_batch_insert([Obj1, Obj2]),
@@ -177,14 +171,11 @@ commit_multiple_operations(_Config) ->
 
 -spec commit_conflict_handling(config()) -> _.
 commit_conflict_handling(_Config) ->
-    Ref = make_domain_ref(),
-    Object = make_test_object(Ref),
-    Version = commit_insert(Object),
+    {Ref, RLObject, _} = make_test_object(make_domain_ref()),
+    #domain_conf_v2_CommitResponse{version = Version1} =
+        commit_insert(RLObject, Ref),
 
     % Try to insert object with same reference
-    Commit = #domain_conf_v2_Commit{
-        ops = [{insert, #domain_conf_v2_InsertOp{object = Object}}]
-    },
     ?assertThrow(
         #domain_conf_v2_OperationConflict{
             conflict =
@@ -192,28 +183,39 @@ commit_conflict_handling(_Config) ->
                     object_ref = Ref
                 }}
         },
-        dmt_client:commit(Version, Commit, make_user_op_id())
+        commit_insert(Version1, RLObject, Ref)
     ).
 
 -spec version_sequence_operations(config()) -> _.
 version_sequence_operations(_Config) ->
-    Ref = make_domain_ref(),
-    Object1 = make_test_object(Ref),
+    {Ref, RLObject, Object1} = make_test_object(make_domain_ref()),
 
     % First insert
-    Version1 = commit_insert(Object1),
-    Result1 = dmt_client:checkout_object(latest, Ref),
+
+    #domain_conf_v2_CommitResponse{version = Version1} =
+        commit_insert(RLObject, Ref),
+    #domain_conf_v2_VersionedObject{object = #domain_CategoryObject{data = Data1} = Result1} =
+        dmt_client:checkout_object(Ref, latest),
     ?assertEqual(Object1, Result1),
 
     % Update
-    Object2 = Object1#{name => <<"updated">>},
-    Version2 = commit_update(Version1, Object2),
+
+    Object2 = Object1#domain_CategoryObject{
+        data = Data1#domain_Category{
+            description = <<"new_desc">>
+        }
+    },
+    Version2 = commit_update(Version1, Ref, Object2),
     ?assert(Version2 > Version1),
-    Result2 = dmt_client:checkout_object(latest, Ref),
+
+    #domain_conf_v2_VersionedObject{object = Result2} =
+        dmt_client:checkout_object(Ref, latest),
     ?assertEqual(Object2, Result2),
 
     % Verify we can still get old version
-    Historical = dmt_client:checkout_object({version, Version1}, Ref),
+
+    #domain_conf_v2_VersionedObject{object = Historical} =
+        dmt_client:checkout_object(Ref, {version, Version1}),
     ?assertEqual(Object1, Historical).
 
 %% Internal functions
@@ -240,15 +242,21 @@ make_user_op_id() ->
         dmt_client_user_op:create(Params, #{}),
     ID.
 
-commit_insert({Ref, Object, _}) ->
+commit_insert(Object) ->
+    commit_insert(Object, undefined).
+
+commit_insert(Object, Ref) ->
+    commit_insert(1, Object, Ref).
+
+commit_insert(Version, Object, Ref) ->
     % Get version from any existing object or start with 0
     Op = {insert, #domain_conf_v2_InsertOp{object = Object, force_ref = Ref}},
     Commit = #domain_conf_v2_Commit{ops = [Op]},
     UserOpID = make_user_op_id(),
-    dmt_client:commit({version, 1}, Commit, UserOpID).
+    dmt_client:commit(Version, Commit, UserOpID).
 
-commit_update(Version, Object) ->
-    Op = {update, #domain_conf_v2_UpdateOp{new_object = Object}},
+commit_update(Version, Ref, Object) ->
+    Op = {update, #domain_conf_v2_UpdateOp{targeted_ref = Ref, new_object = Object}},
     Commit = #domain_conf_v2_Commit{ops = [Op]},
     UserOpID = make_user_op_id(),
     dmt_client:commit(Version, Commit, UserOpID).

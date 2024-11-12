@@ -237,12 +237,11 @@ schedule_fetch(ObjectRef, VersionReference, Opts) ->
     spawn_link(
         fun() ->
             Result =
-                case fetch(VersionReference, ObjectRef, Opts) of
-                    {ok, #domain_conf_v2_VersionedObject{
+                case fetch(ObjectRef, VersionReference, Opts) of
+                    #domain_conf_v2_VersionedObject{
                         global_version = Version0,
-                        object = Object,
                         created_at = CreatedAt
-                    }} ->
+                    } = Object ->
                         Version1 = {version, Version0},
                         put_object_into_table(ObjectRef, Version1, Object, CreatedAt),
                         %% This will be called every time some new object is required.
@@ -257,7 +256,7 @@ schedule_fetch(ObjectRef, VersionReference, Opts) ->
         end
     ).
 
-fetch(VersionReference, ObjectRef, Opts) ->
+fetch(ObjectRef, VersionReference, Opts) ->
     try
         dmt_client_backend:checkout_object(ObjectRef, VersionReference, Opts)
     catch
