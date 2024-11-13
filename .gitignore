@@ -1,5 +1,4 @@
 # Build artifacts
-/_build/
 *.o
 *.beam
 *.plt
@@ -11,3 +10,6 @@ log
 # make stuff
 /.image.*
 Makefile.env
+
+
+/_build/*

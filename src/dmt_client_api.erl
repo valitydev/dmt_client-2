@@ -2,27 +2,23 @@
 
 -behaviour(dmt_client_backend).
 
--export([commit/3]).
--export([checkout/2]).
--export([pull_range/3]).
+-export([commit/4]).
 -export([checkout_object/3]).
 
--spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
-commit(Version, Commit, Opts) ->
-    call('Repository', 'Commit', {Version, Commit}, Opts).
+-spec commit(
+    dmt_client:vsn(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) ->
+    dmt_client:commit_response() | no_return().
+commit(Version, Commit, UserOpID, Opts) ->
+    call('Repository', 'Commit', {Version, Commit, UserOpID}, Opts).
 
--spec checkout(dmt_client:ref(), dmt_client:opts()) -> dmt_client:snapshot() | no_return().
-checkout(Reference, Opts) ->
-    call('Repository', 'Checkout', {Reference}, Opts).
-
--spec pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:opts()) -> dmt_client:history() | no_return().
-pull_range(After, Limit, Opts) ->
-    call('Repository', 'PullRange', {After, Limit}, Opts).
-
--spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
-checkout_object(Reference, ObjectReference, Opts) ->
-    call('RepositoryClient', 'checkoutObject', {Reference, ObjectReference}, Opts).
+-spec checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    dmt_client:versioned_object() | no_return().
+checkout_object(ObjectReference, VersionRef, Opts) ->
+    call('RepositoryClient', 'CheckoutObject', {VersionRef, ObjectReference}, Opts).
 
 call(ServiceName, Function, Args, Opts) ->
     Url = get_service_url(ServiceName),
@@ -37,17 +33,14 @@ call(ServiceName, Function, Args, Opts) ->
             )
         ),
 
-    CallOpts = #{
-        url => Url,
-        event_handler => get_event_handlers(),
-        transport_opts => TransportOpts
-    },
+    CallOpts =
+        #{
+            url => Url,
+            event_handler => get_event_handlers(),
+            transport_opts => TransportOpts
+        },
 
-    Context =
-        case maps:find(woody_context, Opts) of
-            error -> woody_context:new();
-            {ok, Ctx} -> Ctx
-        end,
+    Context = maps:get(woody_context, Opts, woody_context:new()),
 
     case woody_client:call(Call, CallOpts, Context) of
         {ok, Response} ->
@@ -63,9 +56,9 @@ get_service_modname(ServiceName) ->
     {get_service_module(ServiceName), ServiceName}.
 
 get_service_module('Repository') ->
-    dmsl_domain_conf_thrift;
+    dmsl_domain_conf_v2_thrift;
 get_service_module('RepositoryClient') ->
-    dmsl_domain_conf_thrift.
+    dmsl_domain_conf_v2_thrift.
 
 get_event_handlers() ->
     genlib_app:env(dmt_client, woody_event_handlers, []).

@@ -1,39 +1,35 @@
 -module(dmt_client_backend).
 
--export([commit/3]).
--export([checkout/2]).
+-export([commit/4]).
 -export([checkout_object/3]).
--export([pull_range/3]).
 
 %%% Behaviour callbacks
 
--callback commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
+-callback commit(
+    dmt_client:vsn(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) -> dmt_client:commit_response() | no_return().
 
--callback checkout(dmt_client:ref(), dmt_client:opts()) -> dmt_client:snapshot() | no_return().
-
--callback checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
-
--callback pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:opts()) -> dmt_client:history() | no_return().
+-callback checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    dmt_client:versioned_object() | no_return().
 
 %%% API
 
--spec commit(dmt_client:vsn(), dmt_client:commit(), dmt_client:opts()) -> dmt_client:vsn() | no_return().
-commit(Version, Commit, Opts) ->
-    call(commit, [Version, Commit, Opts]).
+-spec commit(
+    dmt_client:base_version(),
+    dmt_client:commit(),
+    dmt_client:user_op_id(),
+    dmt_client:opts()
+) -> dmt_client:commit_response() | no_return().
+commit(Version, Commit, UserOpID, Opts) ->
+    call(commit, [Version, Commit, UserOpID, Opts]).
 
--spec checkout(dmt_client:ref(), dmt_client:opts()) -> dmt_client:snapshot() | no_return().
-checkout(Reference, Opts) ->
-    call(checkout, [Reference, Opts]).
-
--spec checkout_object(dmt_client:ref(), dmt_client:object_ref(), dmt_client:opts()) ->
-    dmsl_domain_thrift:'DomainObject'() | no_return().
-checkout_object(Reference, ObjectReference, Opts) ->
-    call(checkout_object, [Reference, ObjectReference, Opts]).
-
--spec pull_range(dmt_client:vsn(), dmt_client:limit(), dmt_client:opts()) -> dmt_client:history() | no_return().
-pull_range(After, Limit, Opts) ->
-    call(pull_range, [After, Limit, Opts]).
+-spec checkout_object(dmt_client:object_ref(), dmt_client:vsn(), dmt_client:opts()) ->
+    dmt_client:versioned_object() | no_return().
+checkout_object(ObjectReference, VersionReference, Opts) ->
+    call(checkout_object, [ObjectReference, VersionReference, Opts]).
 
 %%% Internal functions
 
